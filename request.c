@@ -1,1 +1,12 @@
-#include "request.h"
+#include "request_lsp_api.c"
+
+int main()
+{
+	/* Create request */
+	struct lsp_request* request = lsp_request_create("www.example.com",123);
+	char* example = "Hey";
+	int msg_cnt = 0;
+	lsp_request_write(request,example,msg_cnt);
+	/* Close the request when done */
+	lsp_request_close(request);
+}
