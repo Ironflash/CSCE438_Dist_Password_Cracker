@@ -6,7 +6,7 @@
 #include <unistd.h> 
 #include <stdlib.h>
 #include <string.h>
-#include "lsp_packet.c"
+#include "lsp_message.c"
 #include <stdio.h>
 // #include <pthread.h>
 
@@ -22,26 +22,6 @@ struct lsp_server
 	int m_socket;		//socket that will listen for incoming connections from clients and workers
 	struct sockaddr_in m_servaddr, m_cliaddr;	//address of the server and client
 };
-
-int isReadable(int sd,int * error,int timeOut) { // milliseconds
-  fd_set socketReadSet;
-  FD_ZERO(&socketReadSet);
-  FD_SET(sd,&socketReadSet);
-  struct timeval tv;
-  if (timeOut) {
-    tv.tv_sec  = timeOut / 1000;
-    tv.tv_usec = (timeOut % 1000) * 1000;
-  } else {
-    tv.tv_sec  = 0;
-    tv.tv_usec = 0;
-  } // if
-  if (select(sd+1,&socketReadSet,0,0,&tv) == SOCKET_ERROR) {
-    *error = 1;
-    return 0;
-  } // if
-  *error = 0;
-  return FD_ISSET(sd,&socketReadSet) != 0;
-}
 
 // Sets up server and returns NULL if server could not be started
 struct lsp_server* lsp_server_create(int port)
@@ -81,33 +61,49 @@ struct lsp_server* lsp_server_create(int port)
 // Returns number of bytes read. conn_id is an output parameter
 int lsp_server_read(const struct lsp_server* a_srv, void* pld, uint32_t* conn_id)
 {
-	char msg[1000];
-	// char* msg;
+	char buffer[1000];
 	int error;
 	int timeOut = 100;
-	// if(*(a_srv->m_socket) == NULL)
-	// {
-	// 	printf("FAIL SOCKET\n");
-	// 	return 0;
-	// }
+
 	printf("Waiting\n");
-	// while (!isReadable(a_srv->m_socket,&error,timeOut)) printf(".");
- //    printf("\n");
+
 	int sockLen = sizeof(a_srv->m_cliaddr);
-	printf("socklen: %d\n",sockLen);
+
 	//get packet from socket
 	int num_read;
-	if((num_read = recvfrom(a_srv->m_socket, msg , 1, 0,
+	if((num_read = recvfrom(a_srv->m_socket, buffer , 1, 0,
                  (struct sockaddr *) &a_srv->m_cliaddr, &sockLen)) < 0)
 	{
 		printf("Unable to read\n");
+		return NULL;
 	}
-	// strcpy(pld,&msg);
-	//deserialize msg into lsp_packet
-	//TO-DO
+	// strcpy(pld,&msg);		//used for testing
+	struct lsp_message msg;
+	// Code to unmarshall a lsp_message ... still in progress won't compile until create proto-c .h and .c
+	size_t msg_len = num_read;
+	msg = lspmessage__unpack(NULL, msg_len, buffer);   
+  	if (msg == NULL)
+    {
+      fprintf(stderr, "error unpacking incoming message\n");
+      return NULL;
+    }
+    // End of unmarshalling
+    
+
+    //get payload from lsp_message
+    memcpy(pld, &msg->payload,sizeof(msg->payload)); // may need fixed
+
 	//get connection id from the packet
+	memcpy(conn_id,&msg->connid,sizeof(uint32_t));
+
+	//set current sequence number for that client
 	//TO-DO
-	printf("Msg:  %s\n",msg);
+
+	printf("Buffer:  %s\n",buffer); // Testing purposes
+
+	//Free memory that was allocated while marshalling
+    lspmessage__free_unpacked(msg, NULL);
+
 	return num_read;
 }
 
