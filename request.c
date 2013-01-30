@@ -4,7 +4,7 @@ int main()
 {
 	/* Create request */
 	struct lsp_request* request = lsp_request_create("www.example.com",123);
-	string example = "test";
+	string example = "new test";
 	int msg_cnt = 0;
 	lsp_request_write(request,example,msg_cnt);
 	/* Close the request when done */
