@@ -1,0 +1,8 @@
+package lspMessage;
+
+message LspMessage
+{
+	required uint32 connid=1; // Connection ID
+	required uint32 seqnum=2; // Sequence Num
+	required bytes payload=3; // Payload
+}
