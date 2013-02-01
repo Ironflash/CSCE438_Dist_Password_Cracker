@@ -15,6 +15,8 @@
 
 #include "server_lsp_api.c"
 
+// g++ server.c lspMessage.pb.cc -o server -lprotobuf -lpthread
+
 using namespace std;
 
 /*--------------------------------------------------------------------------*/

@@ -29,7 +29,7 @@
 
 #include <errno.h>
 
-#include "semaphore.H"
+#include "semaphore.h"
 
 using namespace std;
 
