@@ -1,103 +1,154 @@
+/* 
+    File: request.c
+
+    Author: Daniel Timothy S. Tan
+            Department of Computer Science
+            Texas A&M University
+    Date  : 01/30/2013
+
+    request client main program for HW2 in CSCE 438-500
+*/
+
 /*--------------------------------------------------------------------------*/
 /* INCLUDES */
 /*--------------------------------------------------------------------------*/
 
-// #include "request_lsp_api.c"
+#include <string>
+#include <iostream>
+#include "semaphore.H"
+
+//#include "request_lsp_api.c"
+
+// temporary_class.c for temporary read/write to inbox/outbox
+//#include "temporary_class.c"
+
+using namespace std;
 
 /*--------------------------------------------------------------------------*/
-/* CONSTANTS */
+/* CONSTANTS/VARIABLES */
 /*--------------------------------------------------------------------------*/
+
+static int number_of_requesters;
+static int number_of_data_requests;
+
+static pthread_t *r_threads;
+
+static Semaphore serv_response (1);
+
+// INCOMPLETE: these will be called when LSP is complete
+// Create Request Client-Server Communication channel
+//static struct lsp_request* request_channel;
 
 /*--------------------------------------------------------------------------*/
 /* DATA STRUCTURES */ 
 /*--------------------------------------------------------------------------*/
 
+struct $
+{
+    /* data */
+};
+
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
 
-/* 313 Request thread functions:
-	void *request_thread(void * arguments) {
-	    for (int j=0; j<number_of_data_requests; j++){
-	        REQUEST_NODE * request = new REQUEST_NODE;
-	        *request = *(REQUEST_NODE *)arguments;
-	        bounded_buffer->insert(request);
-	    }
-	    pthread_exit(NULL);
-	}
+//313 Request thread functions:
+void *request_thread(void * arguments) {
+    // 
+    for (int j=0; j<number_of_data_requests; j++){
+    	string * request = new string;
+    	*request = *(string *)arguments;
+    	cout<<"Thread ID: "<<pthread_self()<<"; Attempting to write message: "<< *(request) <<endl;
+        
+        // temp: simulation of server response:
+        string response;
+        while (true) {
+            serv_response.P();
+            cin >> response;
+            if (response == "ack") {
+                serv_response.V();
+                break;
+            } else {
+                cout<<"Server retrying..."<<endl;
+            }
+            serv_response.V();
+        }
 
-	void create_request_threads (){
-	    int new_thread;
-	    // create a child thread for each requester
-	    for (int i = 0; i<number_of_requesters; i++){
-	        // create requests and store in bounded buffer
-	        REQUEST_NODE *request = new REQUEST_NODE;
-	        request->requester_id = i;
-	        if (i == 0) { // Joe Smith
-	            request->request_name = "data Joe Smith";
-	            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)request);
-	            if (new_thread){
-	                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
-	                exit(-1);
-	            }
-	        } else if (i == 1) { // Jane Smith
-	            request->request_name = "data Jane Smith";
-	            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)request);
-	            if (new_thread){
-	                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
-	                exit(-1);
-	            }
-	        } else if (i == 2) { // John Doe
-	            request->request_name = "data John Doe";
-	            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)request);
-	            if (new_thread){
-	                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
-	                exit(-1);
-	            }
-	        }
-	    }
-	}
+        cout<<"Server acknowledges Thread: "<<pthread_self()<<endl;
 
-	void wait_for_all_threads() {
-	    for (int i=0; i<number_of_requesters; i++){
-	        pthread_join(r_threads[i], NULL);
-	    }
-	    cout<<"***************All request threads are done***************"<<endl;
-	    for (int i=0; i<number_of_worker_threads; i++){
-	        REQUEST_NODE *request = new REQUEST_NODE;
-	        request->requester_id = 0;
-	        request->request_name = "quit";
-	        bounded_buffer->insert(request);
-	    }
-	    for (int i=0; i<number_of_worker_threads; i++){
-	        pthread_join(w_threads[i], NULL);
-	    }
-	    cout<<"***************All worker threads are done***************"<<endl;
-	    for (int i=0; i<number_of_requesters; i++){
-	        STATISTIC_NODE *quit_stat = new STATISTIC_NODE;
-	        quit_stat->requester_id = 0;
-	        quit_stat->statistic_value = -1;
-	        deposit->insert(quit_stat);
-	    }
-	    for (int i=0; i<number_of_requesters; i++){
-	        pthread_join(s_threads[i], NULL);
-	    }
-	    cout<<"***************All statistic threads are done***************"<<endl;
-	}
+        // INCOMPLETE: these will be called when LSP is complete
+        
+        // write to request channel *************
+        //lsp_request_write(request_channel,example,msg_length);
+        //??The server needs to know which client and what thread requested
+        //-possible solution: package message with client and thread IDs
 
-	*/
+        // read server response *****************
+        //lsp_request_read();
+    }
+    cout<<"Thread: "<<pthread_self()<<" Quits"<<endl;
+    pthread_exit(NULL);
+}
+
+void create_request_threads (){
+
+	string request_message = "hello";
+	string * test  = new string;
+	*test = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
+	string * testa = new string;
+	*testa = "6d3c60eeb2ddd9cce8de6c092c091ae23ffd2264";
+	string * testb = new string;
+	*testb = "d159ab067e22da46146cc9841ad1cba346153523";
+
+	int msg_length = 40; // default = 40 characters for a hash signature
+
+	int new_thread;
+	// Create a thread for each requester
+    // INCOMPLETE: depending upon the input method for hash signatures, the thread input may change
+
+    for (int i = 0; i<number_of_requesters; i++){
+        if (i == 0) { // test
+            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)test);
+            if (new_thread){
+                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
+                exit(-1);
+            }
+        } else if (i == 1) { // testa
+            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)testa);
+            if (new_thread){
+                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
+                exit(-1);
+            }
+        } else if (i == 2) { // testb
+            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)testb);
+            if (new_thread){
+                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
+                exit(-1);
+            }
+        }
+    }
+}
+
+void wait_for_all_threads() {
+    for (int i=0; i<number_of_requesters; i++){
+        pthread_join(r_threads[i], NULL);
+    }
+    cout<<"***************All request threads are done***************"<<endl;
+
+    // Idea: send a single quit request to the server; 
+    // the server interprets this as the request client closing
+}
 
 /*--------------------------------------------------------------------------*/
 /* MAIN FUNCTION */
 /*--------------------------------------------------------------------------*/
 
 int main(int argc, char **argv) {
-	// Needs to be able to take an input from test file
+	// INCOMPLETE: Needs to be able to take an input from test file
 
 	// Initialization
-
 	number_of_requesters = 3; // # of request_threads
-    number_of_data_requests = 10;
+    number_of_data_requests = 1; // how many messages assigned to 1 thread
     
     string host_name = "localhost";
     unsigned short port_number = 7000;
@@ -117,25 +168,22 @@ int main(int argc, char **argv) {
     pid_t pid;
     r_threads = new pthread_t [number_of_requesters];
 
+    // INCOMPLETE: Initialize Request Client-Server Communication channel
+    //request_channel = lsp_request_create(host_name,123);
+
     // Initialize threads:
-    cout <<"Starting threads"<<endl;
-    
-	// Create request
-	//struct lsp_request* request_channel = lsp_request_create(host_name,123);
+    cout <<"Starting request threads"<<endl;
+    create_request_threads();
 
-	string request_message = "new test";
-	// "test" = a94a8fe5ccb19ba61c4c0873d391e987982fbbd3
-	// "testa" = 6d3c60eeb2ddd9cce8de6c092c091ae23ffd2264
-	// "testb" = d159ab067e22da46146cc9841ad1cba346153523
+	// ***********************************************************
+    wait_for_all_threads();
+    // Close the request client when done
+    //lsp_request_close(request_channel);
+    cout<<"Request client main completed successfully"<<endl;
+    usleep(1000000);
+    // ***********************************************************
 
-	int msg_length = 0; // 40 characters
-
-	// write 
-	//lsp_request_write(request_channel,example,msg_length);
-	//lsp_request_read();
-
-	// Close the request when done
-	//lsp_request_close(request_channel);
+    return 0;
 }
 
 /*
@@ -143,6 +191,7 @@ int main(int argc, char **argv) {
 
 	// ***********************************************************
 	// getopt code
+
     int index;
     int c = 0;
     cout<<"[-n <number of data requests per person>]"<<endl;
@@ -196,26 +245,7 @@ int main(int argc, char **argv) {
     assert(gettimeofday(&tp_start, 0) == 0);
     // ***********************************************************
     
-    
-    create_request_threads();
-    // create worker threads
-    int new_worker_thread;
-    for (int i = 0; i<number_of_worker_threads; i++){
-        // remove requests from the bounded buffer
-        NetworkRequestChannel *worker_channel = new NetworkRequestChannel (host_name, port_number);
-        new_worker_thread = pthread_create(&w_threads[i], NULL, worker_thread, worker_channel);
-        if (new_worker_thread){
-            cout<<"ERROR: return code from pthread_create() is "<<new_worker_thread<<endl;
-            exit(-1);
-        }
-    }
-    create_statistics_threads();
-    wait_for_all_threads();
-    NetworkRequestChannel quit(host_name, port_number);
-    cout<<"Main completed successfully"<<endl;
-    usleep(1000000);
-
-    print_histograms();
+    // ***********************************************************
     assert(gettimeofday(&tp_end, 0) == 0);
     printf("Time taken for computation : "); 
     print_time_diff(&tp_start, &tp_end);
@@ -223,5 +253,6 @@ int main(int argc, char **argv) {
     clean_up_fifo();
     atexit(clean_up_fifo);
     return 0;
+    // ***********************************************************
 }
 */
