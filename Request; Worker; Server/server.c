@@ -13,9 +13,8 @@
 /* INCLUDES */
 /*--------------------------------------------------------------------------*/
 
+#include <iostream>
 #include "server_lsp_api.c"
-
-// g++ server.c lspMessage.pb.cc -o server -lprotobuf -lpthread
 
 using namespace std;
 
@@ -23,9 +22,8 @@ using namespace std;
 /* CONSTANTS/VARIABLES */
 /*--------------------------------------------------------------------------*/
 
-// INCOMPLETE: these will be called when LSP is complete
 // Create Server
-//struct lsp_server* server_channel;
+struct lsp_server* server_channel;
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
@@ -34,7 +32,9 @@ using namespace std;
 void server_loop() {
 	bool exit = false;
 	while(exit == false) {
-		//num_read = lsp_server_read(serv,(void*) &input, &fake_id);
+		string input;
+		int num_read = 1;
+		//int num_read = lsp_server_read(serv,(void*) &input, &fake_id);
 
 		if(num_read > 0)
 		{
@@ -50,29 +50,57 @@ void server_loop() {
 
 int main(int argc, char **argv) {
 
-	unsigned short port_number = 7000;
-	//int backlog = 1; // number of client requests in queue
-	//const int MAX_MESSAGE = 255;
+	unsigned short port_number = 123;
+
+	// ***********************************************************
+    // getopt code
+    int index;
+    int c = 0;
+    cout<<"[-p <port number of server host>]"<<endl;
+    while ((c = getopt (argc, argv, "p:")) != -1) {
+        switch (c) {
+            case 'p':
+                port_number = (unsigned short)(atoi(optarg));
+                break;
+            case '?':
+                if ((optopt == 'p')) {
+                    cout<<"ERROR: Option -"<<optopt<<" requires an argument"<<endl;
+                } else if (isprint (optopt)) {
+                    cout<<"ERROR: Unknown option for -"<<optopt<<endl;
+                } else {
+                    cout<<"ERROR: Unknown option character"<<endl;
+                }
+                return 1;
+            default:
+                abort ();
+        }
+    }
+    for (index = optind; index < argc; index++) {
+        printf ("Non-option argument %s\n", argv[index]);
+    }
+    // ***********************************************************
 
 	cout<<"------------port number = "<<port_number<<endl;
-    cout<<"-----------backlog size = "<<backlog<<endl;
 
+	// Initialize Server Communication Channel
     cout<<"Establishing UDP-LSP Server Socket..."<<endl;
 
     // ***********************************************************
-    // Temp TCP connection to test client-server communication
-    /*
-    NetworkRequestChannel server_channel(port_number, handle_data_requests, backlog);
+    // Implement LSP eventually
+    server_channel = lsp_server_create(port_number);
 
-    server_channel.~NetworkRequestChannel();
-    cout<<"Closing TCP Server Socket..."<<endl;
-    usleep(1000000);
-    */
-    // ***********************************************************
-
-    // ***********************************************************
-    // INCOMPLETE: Implement LSP eventually
-    // server_channel = lsp_server_create(123);
+    string input;
+    uint32_t fake_id = 0;
+	//int num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
+	int num_read;
+	while(true)
+	{
+		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
+		if(num_read > 0)
+		{
+			printf("From Client: %s\n",input.c_str());
+		}
+	} 
     /*
     string input;
 	uint32_t fake_id = 0;
@@ -83,12 +111,12 @@ int main(int argc, char **argv) {
 
 
 	// Initialize Server Loop
-	server_loop();
+	//server_loop();
 
 	// ***********************************************************
 
 	// Close the server when done
-	// lsp_server_close(serv,1); //1 is just for testing needs to change
+	lsp_server_close(server_channel,1); //1 is just for testing needs to change
 	cout<<"Server main completed successfully"<<endl;
 	usleep(1000000);
 	// ***********************************************************

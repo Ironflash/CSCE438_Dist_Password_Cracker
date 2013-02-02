@@ -13,7 +13,6 @@
 /* INCLUDES */
 /*--------------------------------------------------------------------------*/
 
-#include <string>
 #include <iostream>
 //#include "semaphore.h"
 #include "request_lsp_api.c"
@@ -44,8 +43,8 @@ static struct lsp_request* request_channel;
 
 int main(int argc, char **argv) {
     
-    string host_name = "localhost";
-    unsigned short port_number = 123;
+    const char * host_name = "www.example.com";
+    unsigned short port_number = 1234;
 
     // "test" = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
     string request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
@@ -101,17 +100,24 @@ int main(int argc, char **argv) {
 
     // Initialize Request Client-Server Communication Channel
     cout <<"Initializing Request Channel...."<<endl;
-    request_channel = lsp_request_create(host_name.c_str(),port_number);
+    request_channel = lsp_request_create(host_name, port_number);
 
+    /*
     string temp;
     for (;;){
         cin>>temp;
         if (temp == "exit") {
             break;
         } else {
-
+            cout<<"Type 'exit' when finished..."<<endl;
         }
     }
+    */
+    
+    int msg_cnt = 0;
+    lsp_request_write(request_channel,request_msg,msg_cnt);
+    while(true){}
+    //*/
 
 	// ***********************************************************
     // Close the request client when done
