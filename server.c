@@ -18,5 +18,5 @@ int main()
 		}
 	} 
 	/* Close the server when done */
-	// lsp_server_close(serv,1); //1 is just for testing needs to change
+	lsp_server_close(serv,1); //1 is just for testing needs to change
 }

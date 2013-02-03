@@ -68,6 +68,12 @@ void* readReqMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
+		// check for keep alive, must be checked before checking for out of order
+		if(connid != 0 && seqnum == 0) // client is still alive message
+		{
+			printf("received keep alive\n");
+			a_srv->receivedKeepAlive(connid);
+		}
 		/* check if message is a duplicate or out of order*/
 		if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
 		{
@@ -80,8 +86,7 @@ void* readReqMessage(void* arg)
 			a_srv->checkMessageAck(connid,seqnum);
 			/*if it is an ACK then attempt to get next message */
 			continue;
-		}
-		
+		}	
 		/* check if this is a connection request */
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
 		else if(connid == 0 && seqnum == 0 && payload == "")
@@ -167,7 +172,6 @@ void* readWorkMessage(void* arg)
 		{
 			printf("Read: %d Bytes\n",num_read);
 		}
-		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
 		// Code to unmarshall a lsp_message ... still in progress 
 		GOOGLE_PROTOBUF_VERIFY_VERSION;
 		lspMessage::LspMessage msg;
@@ -191,6 +195,12 @@ void* readWorkMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
+		// check for keep alive, must be checked before checking for out of order
+		if(connid != 0 && seqnum == 0) // client is still alive message
+		{
+			printf("received keep alive\n");
+			a_srv->receivedKeepAlive(connid);
+		}
 		/* check if message is a duplicate or out of order*/
 		if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
 		{
@@ -277,6 +287,7 @@ void* writeMessage(void* arg)
 		{
 			continue;
 		}
+		printf("reached\n");
 		string pld = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 		uint32_t connid = message->m_connid;
 		uint32_t seqnum = message->m_seqnum;
@@ -332,6 +343,7 @@ void* writeMessage(void* arg)
 		{
 			/* set message waiting */
 			a_srv->setMessageWaiting(message);
+			a_srv->dataWasSentTo(connid);
 		}
 		
 		// Free up memory that was allocated while marshalling
@@ -349,7 +361,7 @@ void* epochTimer(void* arg)
 	{
 		/* only check every so often*/
 		sleep(a_srv->getEpoch());
-
+		printf("epoch has started\n");
 		/*Acknowledge the connection request, if no data messages have been received.*/
 		vector<uint32_t> ids = a_srv->getAwaitingMessages();
 		if(!ids.empty())
@@ -368,6 +380,7 @@ void* epochTimer(void* arg)
 				}
 			}
 		}
+		printf("one\n");
 		/*Acknowledge the most recently received data message, if any.*/
 		lsp_message* message = a_srv->getMostRecentMessage();
 		if(message != NULL)
@@ -375,6 +388,7 @@ void* epochTimer(void* arg)
 			printf("ack most recent data message\n");
 			a_srv->toOutbox(message);
 		}
+		printf("two\n");
 		/*If a data message has been sent, but not yet acknowledged, then resend
 			the data message. */
 		if(!a_srv->messageAcknowledged())
@@ -390,6 +404,34 @@ void* epochTimer(void* arg)
 			}
 			printf("resending unacknowledged message\n");
 			a_srv->toOutbox(a_srv->getMessageWaiting());
+		}
+		printf("three\n");
+		/* If no data has been sent to a client than check for a keep alive signal */
+		ids = a_srv->getRequests();
+		for(int i = 0; i < ids.size(); i++)
+		{
+			//no data sent to client
+			if(!a_srv->dataSentTo(ids[i]) && !a_srv->keepAliveReceived(ids[i]))
+			{
+				a_srv->incNoKeepAlive(ids[i]);
+				if(a_srv->clientAboveKAThreshhold(ids[i]))
+				{
+					a_srv->dropClient(ids[i]);
+				}
+			}
+		}
+		ids = a_srv->getWorkers();
+		for(int i = 0; i < ids.size(); i++)
+		{
+			//no data sent to client
+			if(!a_srv->dataSentTo(ids[i]) && !a_srv->keepAliveReceived(ids[i]))
+			{
+				a_srv->incNoKeepAlive(ids[i]);
+				if(a_srv->clientAboveKAThreshhold(ids[i]))
+				{
+					a_srv->dropClient(ids[i]);
+				}
+			}
 		}
 	}
 
