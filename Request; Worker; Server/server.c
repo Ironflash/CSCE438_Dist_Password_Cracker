@@ -1,10 +1,10 @@
 /* 
     File: server.c
 
-    Author: Daniel Timothy S. Tan
-            Department of Computer Science
-            Texas A&M University
-    Date  : 01/30/2013
+    Authors: Daniel Timothy S. Tan
+             Department of Computer Science
+             Texas A&M University
+    Date   : 01/30/2013
 
     server main program for HW2 in CSCE 438-500
 */
@@ -91,16 +91,29 @@ int main(int argc, char **argv) {
 
     string input;
     uint32_t fake_id = 0;
+    uint32_t send_response_to;
 	//int num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
 	int num_read;
-	while(true)
-	{
+	int answer_length = 4;
+	while(true) {
 		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
-		if(num_read > 0)
-		{
-			printf("From Client: %s\n",input.c_str());
+		if(num_read > 0) {
+			cout<<"From Client (ID="<<fake_id<<"): "<<input.c_str()<<endl;
+			//usleep(1000000);
+			//cout<<"response to: "<<fake_id<<endl;
+			string answer = "test";
+			lsp_server_write(server_channel, &answer, answer_length, fake_id);
+			//break;
+			for (;;){
+				//block
+			}
 		}
-	} 
+	}
+	cout<<"EXIT WHILE loop =) "<<endl;
+	for (;;){
+	}
+	//lsp_server_write(server_channel, void* pld, int lth, uint32_t conn_id);
+	//bool lsp_server_write(lsp_server* a_srv, void* pld, int lth, uint32_t conn_id);
     /*
     string input;
 	uint32_t fake_id = 0;

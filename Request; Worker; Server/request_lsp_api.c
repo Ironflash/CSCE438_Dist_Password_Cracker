@@ -34,7 +34,7 @@ void* readMessage(void* arg)
 		// sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
 		//get packet from socket
 		// if((num_read = recvfrom(a_request->getReadSocket(), buffer , MAX_BUFFER, 0,	
-	 //                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
+		//                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		// {
 		if((num_read = recvfrom(a_request->getSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
@@ -188,8 +188,8 @@ void* writeMessage(void* arg)
 		// end of marshalling
 
 		printf("Attempting to send message\n");
-		printf("Size of pld: %d\n", (int)sizeof(pld)); // (int) added cast 
-		printf("size of msg: %d\n", (int)sizeof(*msg)); // (int) added cast
+		printf("Size of pld: %d\n", sizeof(pld));
+		printf("size of msg: %d\n", sizeof(*msg));
 
 		// printf("Socket: %d\n",a_request->getSocket());
 
@@ -289,8 +289,8 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
 	tempCli.sin_port = htons(newRequest->getPort());
   	newRequest->setAddr(tempCli);
-	//Bind Socket
-	if (bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0)
+  	//Bind Socket
+	if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0)
 	{
 		perror("bind failed on read\n");
 		delete newRequest;

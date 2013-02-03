@@ -8,12 +8,6 @@ req_client: request
 
 hw2_server: server
 
-#request_lsp_api.o: request_lsp_api.c
-#	g++ -c -g request_lsp_api.c
-
-#request: request.c request_lsp_api.c
-#	g++ -g -o request request.c request_lsp_api.c
-
 semaphore.o: semaphore.H semaphore.C
 	g++ -c -g semaphore.C
 

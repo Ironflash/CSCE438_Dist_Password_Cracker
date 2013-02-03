@@ -1,10 +1,10 @@
 /* 
     File: request.c
 
-    Author: Daniel Timothy S. Tan
-            Department of Computer Science
-            Texas A&M University
-    Date  : 01/30/2013
+    Authors: Daniel Timothy S. Tan
+             Department of Computer Science
+             Texas A&M University
+    Date   : 01/30/2013
 
     request client main program for HW2 in CSCE 438-500
 */
@@ -14,11 +14,7 @@
 /*--------------------------------------------------------------------------*/
 
 #include <iostream>
-//#include "semaphore.h"
 #include "request_lsp_api.c"
-
-// temporary_class.c for temporary read/write to inbox/outbox
-//#include "temporary_class.c"
 
 using namespace std;
 
@@ -101,22 +97,23 @@ int main(int argc, char **argv) {
     // Initialize Request Client-Server Communication Channel
     cout <<"Initializing Request Channel...."<<endl;
     request_channel = lsp_request_create(host_name, port_number);
+    
 
-    /*
-    string temp;
-    for (;;){
-        cin>>temp;
-        if (temp == "exit") {
-            break;
-        } else {
-            cout<<"Type 'exit' when finished..."<<endl;
+    int msg_cnt = 0;
+    lsp_request_write(request_channel,request_msg,msg_length);
+    uint8_t* serv_response;
+    int reading;
+    while(true){
+        reading = lsp_request_read(request_channel,serv_response);
+        //cout<<"read = "<<reading<<endl;
+        if (reading > 0) {
+            cout<<"!!!!!!Got a response!!!!!!"<<endl;
+            for(;;){
+                //block
+            }
         }
     }
-    */
-    
-    int msg_cnt = 0;
-    lsp_request_write(request_channel,request_msg,msg_cnt);
-    while(true){}
+    //*((string*)pld)
     //*/
 
 	// ***********************************************************
