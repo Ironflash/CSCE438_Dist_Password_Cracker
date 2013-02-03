@@ -72,6 +72,12 @@ void* readMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
+		/* check if message is a duplicate or out of order*/
+		if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
+		{
+			// drop the message
+			continue;
+		}
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -80,11 +86,11 @@ void* readMessage(void* arg)
 		}
 		/* check if this is a response to a connection request */
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
-		else if(connid != 0 && seqnum == 0 && payload == "" && a_request->getConnid() == 0)
+		else if(connid != 0 && seqnum == 0 && payload == "")
 		{
 			printf("Connection request response detected\n");
 			a_request->setConnid(connid);
-			a_request->waitingToOutbox();
+			a_request->waitingToOutbox(); 
 		}
 		else if(connid == 0 && seqnum == 0)	// somereason a server sent a message using connid 0
 		{
@@ -97,8 +103,10 @@ void* readMessage(void* arg)
 		
 			printf("sending to outbox\n");
 			/* add ACK to outbox */
-			printf("Sending request message to outbox with id: %d\n",connid);
+			printf("Sending ack message to outbox with id: %d\n",connid);
 			a_request->toOutbox(new lsp_message(connid,seqnum,""));	
+			// update the last sequnce number from server
+			a_request->increaseLastSeqnum();
 		}	
 		printf("END OF READ\n");
 	}
@@ -212,8 +220,12 @@ void* writeMessage(void* arg)
 		{
 			printf("Sent: %d bytes\n",sent);
 		}
-		/* set message waiting */
-		a_request->setMessageWaiting(message);
+		//message is not an acknowledgement
+		if(pld != "")
+		{
+			/* set message waiting */
+			a_request->setMessageWaiting(message);
+		}	
 
 		// Free up memory that was allocated while marshalling
 		free (buffer);

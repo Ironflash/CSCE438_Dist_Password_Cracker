@@ -52,7 +52,7 @@ void* readReqMessage(void* arg)
 	      fprintf(stderr, "error unpacking incoming message\n");
 	      // return NULL;
 	    }
-	    printf("End of marshalling\n");
+	    // printf("End of marshalling\n");
 	    // End of unmarshalling
 
 	    //consruct message
@@ -68,6 +68,12 @@ void* readReqMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
+		/* check if message is a duplicate or out of order*/
+		if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
+		{
+			// drop the message
+			continue;
+		}
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -77,10 +83,10 @@ void* readReqMessage(void* arg)
 		}
 		
 		/* check if this is a connection request */
-		printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
-		if(connid == 0 && seqnum == 0 && payload == "")
+		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
+		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
-			printf("Connection request detected\n");
+			// printf("Connection request detected\n");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
 			if(a_srv->hasReqDisconnect())
@@ -92,12 +98,18 @@ void* readReqMessage(void* arg)
 				connid = a_srv->nextReqId();
 			}
 			/* add client to list of clients*/
-			printf("Client Address Port from read: %d\n",ntohs(tempCli->sin_port));
-			printf("Client Id from read: %d\n",connid);
+			// printf("Client Address Port from read: %d\n",ntohs(tempCli->sin_port));
+			// printf("Client Id from read: %d\n",connid);
 			a_srv->toCliAddr(connid,tempCli);
+			a_srv->updateClientSeqnum(connid,seqnum);
+			/* add worker to list of workers */
+			a_srv->addRequest(connid);
 			/* Add message to inbox */
 			//have to call after client address has been added 
-			a_srv->toInbox(new lsp_message(0,seqnum,payload,num_read));
+			// a_srv->toInbox(new lsp_message(0,seqnum,payload,num_read));
+
+			/* add id to a list of ids that have not yet received a message on */
+			a_srv->awaitingMessage(connid);
 		}
 		else if(connid == 0 && seqnum == 0)	// somereason a client sent a message using connid 0 other than connecting
 		{
@@ -108,11 +120,21 @@ void* readReqMessage(void* arg)
 		{
 			/* Add message to inbox */
 			a_srv->toInbox(new lsp_message(connid,seqnum,payload,num_read));
+
+			/* Remove message from list of ids that have not received a message */
+			a_srv->removeAwaitingMessage(connid);
+
+			/* update the seqnum of the client */
+			a_srv->updateClientSeqnum(connid,seqnum);
+
+			/* keep track of most recently received data message */
+			a_srv->setMostRecentMessage(new lsp_message(connid,seqnum,""));
 		}
-		printf("sending to outbox\n");
+		// printf("sending to outbox\n");
 		/* add ACK to outbox */
-		printf("Sending request message to outbox with id: %d\n",connid);
+		// printf("Sending request message to outbox with id: %d\n",connid);
 		a_srv->toOutbox(new lsp_message(connid,seqnum,""));	
+		
 		printf("END OF READ\n");
 	}
 }
@@ -155,7 +177,7 @@ void* readWorkMessage(void* arg)
 	      fprintf(stderr, "error unpacking incoming message\n");
 	      // return NULL;
 	    }
-	    printf("End of marshalling\n");
+	    // printf("End of marshalling\n");
 	    // End of unmarshalling
 
 	    //consruct message
@@ -169,16 +191,22 @@ void* readWorkMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
+		/* check if message is a duplicate or out of order*/
+		if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
+		{
+			// drop the message
+			continue;
+		}
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
 			a_srv->checkMessageAck(connid,seqnum);
-			printf("rached\n");
+			// printf("rached\n");
 			/*if it is an ACK then attempt to get next message */
 			continue;
 		}
 		/* check if this is a connection request */
-		if(connid == 0 && seqnum == 0 && payload == "")
+		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
@@ -192,9 +220,15 @@ void* readWorkMessage(void* arg)
 			}
 			/* add client to list of clients*/
 			a_srv->toCliAddr(connid,tempCli);
+			a_srv->updateClientSeqnum(connid,seqnum);
+			/* add worker to list of workers */
+			a_srv->addWorker(connid);
 			/* Add message to inbox */
 			//have to call after client address has been added 
-			a_srv->toInbox(new lsp_message(0,seqnum,payload,num_read));
+			// a_srv->toInbox(new lsp_message(0,seqnum,payload,num_read));
+
+			/* add id to a list of ids that have not yet received a message on */
+			a_srv->awaitingMessage(connid);
 		}
 		else if(connid == 0 && seqnum == 0)	// somereason a client sent a message using connid 0 other than connecting
 		{
@@ -205,9 +239,19 @@ void* readWorkMessage(void* arg)
 		{
 			/* Add message to inbox */
 			a_srv->toInbox(new lsp_message(connid,seqnum,payload,num_read));
+
+			/* Remove message from list of ids that have not received a message */
+			a_srv->removeAwaitingMessage(connid);
+
+			/* update the seqnum of the client */
+			a_srv->updateClientSeqnum(connid,seqnum);
+
+			/* keep track of most recently received data message */
+			a_srv->setMostRecentMessage(new lsp_message(connid,seqnum,""));	
+
 		}
 		/* add ACK to outbox */
-		printf("Sending worker message to outbox with id: %d\n",connid);
+		// printf("Sending worker message to outbox with id: %d\n",connid);
 		a_srv->toOutbox(new lsp_message(connid,seqnum,""));	
 		
 		printf("END OF READ\n");
@@ -222,7 +266,7 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
-		/* Check for if last message has reveived ACK if not DO NOT get another message */
+		/* Check for if last message has reveived ACK, if not DO NOT get another message */
 		if(!a_srv->messageAcknowledged())
 		{
 			continue;
@@ -231,7 +275,7 @@ void* writeMessage(void* arg)
 		lsp_message* message = a_srv->fromOutbox();
 		if(message == NULL)
 		{
-			continue;	// TO-DO this needs to probably be adjusted
+			continue;
 		}
 		string pld = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 		uint32_t connid = message->m_connid;
@@ -252,12 +296,13 @@ void* writeMessage(void* arg)
 			printf("serialize failed\n");
 			// return false;
 		}
-		printf("Marshalled successfully\n");
+		// printf("Marshalled successfully\n");
 		// end of marshalling
 
+
 		printf("Attempting to send message\n");
-		printf("Size of pld: %d\n", sizeof(pld));
-		printf("size of msg: %d\n", sizeof(*msg));
+		// printf("Size of pld: %d\n", sizeof(pld));
+		// printf("size of msg: %d\n", sizeof(*msg));
 
 		// printf("Socket: %d\n",a_request->getSocket());
 
@@ -267,9 +312,11 @@ void* writeMessage(void* arg)
 		if(cliAddr == NULL)
 		{
 			printf("NULL client address \n");
-			break;
+			free (buffer);
+			delete msg;
+			continue;
 		}
-		printf("Client Address Port: %d\n",ntohs(cliAddr->sin_port));
+		// printf("Client Address Port: %d\n",ntohs(cliAddr->sin_port));
 
 		if((sent = sendto(a_srv->getWriteSocket(), buffer, size, 0, (struct sockaddr *)cliAddr, sizeof(*cliAddr))) < 0) //need to get socket of client
 		{
@@ -280,18 +327,78 @@ void* writeMessage(void* arg)
 		{
 			printf("Sent: %d bytes\n",sent);
 		}
-		/* set message waiting */
-		a_srv->setMessageWaiting(message);
+		// message is not an acknowledgment
+		if(pld != "")
+		{
+			/* set message waiting */
+			a_srv->setMessageWaiting(message);
+		}
+		
 		// Free up memory that was allocated while marshalling
 		free (buffer);
 		delete msg;
 		printf("END OF WRITE\n");
 	}
 }
+
+/* epoch timer will keep track of when no activity has occured for a set amount of time */
+void* epochTimer(void* arg)
+{
+	lsp_server* a_srv = (lsp_server*) arg;
+	while(true)
+	{
+		/* only check every so often*/
+		sleep(a_srv->getEpoch());
+
+		/*Acknowledge the connection request, if no data messages have been received.*/
+		vector<uint32_t> ids = a_srv->getAwaitingMessages();
+		if(!ids.empty())
+		{
+			printf("sending ack because no data received\n");
+			// send a response to every connection that has not received a response
+			for(int i = 0; i < ids.size(); i++)
+			{
+				if(!a_srv->requestDis(ids[i]) && !a_srv->workerDis(ids[i]))
+				{
+					uint32_t seqnum = a_srv->getCliSeqnum(ids[i]);
+					if(seqnum >= 0)
+					{
+						a_srv->toOutbox(new lsp_message(ids[i],seqnum,""));
+					}
+				}
+			}
+		}
+		/*Acknowledge the most recently received data message, if any.*/
+		lsp_message* message = a_srv->getMostRecentMessage();
+		if(message != NULL)
+		{
+			printf("ack most recent data message\n");
+			a_srv->toOutbox(message);
+		}
+		/*If a data message has been sent, but not yet acknowledged, then resend
+			the data message. */
+		if(!a_srv->messageAcknowledged())
+		{
+			lsp_message* message = a_srv->getMessageWaiting();
+			uint32_t connid = message->m_connid;
+			//increase the number of no responses from a client
+			a_srv->noResponse(connid);
+			//determin if the number of no responses is above the threshhold
+			if(a_srv->clientAboveThreshhold(connid))
+			{
+				a_srv->dropClient(connid);
+			}
+			printf("resending unacknowledged message\n");
+			a_srv->toOutbox(a_srv->getMessageWaiting());
+		}
+	}
+
+
+}
+
 // Sets up server and returns NULL if server could not be started
 lsp_server* lsp_server_create(int port)
 {
-	printf("one");
 	lsp_server* newServer = new lsp_server(); 
 	if(newServer == NULL)
 	{
@@ -407,6 +514,22 @@ lsp_server* lsp_server_create(int port)
 		delete newServer;
 		return NULL;
 	}
+
+	/* start a thread that will maintain an epoch timer */
+	pthread_t epochThread = newServer->getEpochThread();
+	if( (pthread_create(&epochThread, NULL, epochTimer, (void*)(newServer))) < 0)
+	{
+		perror("Epoch Pthread create failed");
+		delete newServer;
+		return NULL;
+	}
+	else if((pthread_detach(newServer->getEpochThread())) < 0)
+	{
+		perror("Write Pthread detach failed");
+		delete newServer;
+		return NULL;
+	}
+
 	return newServer;
 }
 
@@ -431,8 +554,34 @@ bool lsp_server_write(lsp_server* a_srv, void* pld, int lth, uint32_t conn_id)
 	string payload = *((string*)pld);
 	/*perform check on input*/
 
+	if(a_srv->requestDis(conn_id) || a_srv->workerDis(conn_id))
+	{
+		return false;
+	}
 	a_srv->toOutbox(new lsp_message(conn_id,a_srv->nextSeq(),payload));
 	return true;
+}
+
+vector<uint32_t> lsp_server_requests(lsp_server* a_srv)
+{
+	return a_srv->getRequests();
+}
+
+vector<uint32_t> lsp_server_workers(lsp_server* a_srv)
+{
+	return a_srv->getWorkers();
+}
+
+/* returns a list of request ids that have disconnected*/
+vector<uint32_t> lsp_server_requestDisconnects(lsp_server* a_srv)
+{
+	return a_srv->getRequestDis();
+}
+
+/* returns a list of worker ids that have disconnected*/
+vector<uint32_t> lsp_server_workersDisconnects(lsp_server* a_srv)
+{
+	return a_srv->getWorkerDis();
 }
 
 // Close connection.

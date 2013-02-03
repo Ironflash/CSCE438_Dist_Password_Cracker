@@ -25,12 +25,14 @@ private:
 	bool m_messageAcknowledged;		// has last message been acknowledged
 	bool m_isMessageWaiting;
 	uint32_t m_nextSeqnum;
+	uint32_t m_lastServerSeqnum;	// the last sequence number recieved from the server
 public:
 
 	lsp_request()
 	{
 		m_connid = 0;
 		m_nextSeqnum = 0;
+		m_lastServerSeqnum = 0;
 		m_messageAcknowledged = true;
 		m_isMessageWaiting = false;
 		pthread_mutex_init(&m_waitingMessageLock, NULL);
@@ -136,6 +138,11 @@ public:
 		pthread_mutex_unlock(&m_waitingMessageLock);
 	}
 
+	void increaseLastSeqnum()
+	{
+		m_lastServerSeqnum++;
+	}
+
 	/* getters */
 
 	// int getReadPort() const
@@ -202,6 +209,11 @@ public:
 	pthread_t getWriteThread() const
 	{
 		return m_writeThread;
+	}
+
+	uint32_t getLastSeqnum() const
+	{
+		return m_lastServerSeqnum;
 	}
 
 	lsp_message* fromInbox()
