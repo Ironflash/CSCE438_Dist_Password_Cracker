@@ -93,6 +93,11 @@ public:
   bool lsp_request_write(string pld, int lth);
   bool lsp_request_close();
 
+  void lsp_worker_create(const char* dest, int port);
+  string lsp_worker_read(uint8_t* pld);
+  bool lsp_worker_write(string pld, int lth);
+  bool lsp_worker_close();
+
   NetworkRequestChannel* lsp_server_create(int port, void * (*connection_handler) (void *));
   int lsp_server_read(void* pld, uint32_t* conn_id);
   bool lsp_server_write(void* pld, int lth, uint32_t conn_id);

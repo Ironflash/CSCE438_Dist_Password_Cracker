@@ -17,6 +17,9 @@ netreqchannel.o: netreqchannel.h netreqchannel.c
 trequest: request.c netreqchannel.o
 	g++ request.c netreqchannel.o lspMessage.pb.cc -o request -lprotobuf -lpthread
 
+tworker: worker.c netreqchannel.o
+	g++ worker.c netreqchannel.o lspMessage.pb.cc -o worker -lprotobuf -lpthread
+
 tserver: server.c netreqchannel.o
 	g++ server.c netreqchannel.o lspMessage.pb.cc -o server -lprotobuf -lpthread
 
@@ -43,6 +46,12 @@ hw2rt:
 	rm -f *o request request_lsp_api core
 	rm -f fifo*
 	make trequest
+
+hw2wt:
+	clear
+	rm -f *o worker worker_lsp_api core
+	rm -f fifo*
+	make tworker
 
 hw2st:
 	clear

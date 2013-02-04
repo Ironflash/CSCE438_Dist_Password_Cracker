@@ -82,6 +82,30 @@ bool lsp_request_close() {
   (*request_channel).~NetworkRequestChannel();
   return true;
 }
+
+NetworkRequestChannel* worker_channel;
+void lsp_worker_create(const char* dest, int port){
+  unsigned short port_number = (unsigned short) port;
+  string host_name = (string)dest;
+  worker_channel = new NetworkRequestChannel(host_name, port_number);
+  //return request_channel;
+}
+string lsp_worker_read(uint8_t* pld) {
+  string reply = worker_channel->cread();
+  //*((string*)pld) = reply;
+  return reply;
+}
+bool lsp_worker_write(string pld, int lth) {
+  cout<<"Sending Request = "<<pld<<endl;
+  string reply = worker_channel->send_request(pld);
+  cout<<"Received reply = "<<reply<<endl;
+  return true;
+}
+bool lsp_worker_close() {
+  (*worker_channel).~NetworkRequestChannel();
+  return true;
+}
+
 NetworkRequestChannel* lsp_server_create(int port, void * (*connection_handler) (void *)){
   unsigned short port_number = port;
   int backlog = 10;

@@ -17,8 +17,8 @@
 #include <iostream>
 //#include "worker_lsp_api.c"
 
-// temporary_class.c for temporary read/write to inbox/outbox
-//#include "temporary_class.c"
+// netreqchannel.h for temporary read/write to inbox/outbox
+#include "netreqchannel.h"
 
 using namespace std;
 
@@ -32,7 +32,7 @@ static pthread_t *w_threads;
 
 // INCOMPLETE: these will be called when LSP is complete
 // Create Request Client-Server Communication channel
-//static struct lsp_worker* worker_channel;
+static struct lsp_worker* worker_channel;
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
@@ -212,8 +212,46 @@ int main(int argc, char **argv) {
     // Initialization
     number_of_worker_threads = 2;
 
-    string host_name = "localhost";
+    const char * host_name = "localhost";
     unsigned short port_number = 7000;
+
+    // ***********************************************************
+    // getopt code
+    int index;
+    int c = 0;
+    cout<<"[-w <number of worker threads>]"<<endl;
+    cout<<"[-h <name of server host>]"<<endl;
+    cout<<"[-p <port number of server host>]"<<endl;
+    while ((c = getopt (argc, argv, "h:p:r:l:")) != -1) {
+        switch (c) {
+            case 'w':
+                number_of_worker_threads = atoi(optarg);
+                break;
+            case 'h':
+                host_name = optarg;
+                break;
+            case 'p':
+                port_number = (unsigned short)(atoi(optarg));
+                break;
+            case '?':
+                if ((optopt == 'w') ||
+                    (optopt == 'h') || 
+                    (optopt == 'p')) {
+                    cout<<"ERROR: Option -"<<optopt<<" requires an argument"<<endl;
+                } else if (isprint (optopt)) {
+                    cout<<"ERROR: Unknown option for -"<<optopt<<endl;
+                } else {
+                    cout<<"ERROR: Unknown option character"<<endl;
+                }
+                return 1;
+            default:
+                abort ();
+        }
+    }
+    for (index = optind; index < argc; index++) {
+        printf ("Non-option argument %s\n", argv[index]);
+    }
+    // ***********************************************************
 
     cout<<"-----------number of worker threads = "<<number_of_worker_threads<<endl;
     cout<<"----------------name of server host = "<<host_name<<endl;
@@ -227,9 +265,16 @@ int main(int argc, char **argv) {
     //worker_channel = lsp_worker_create(host_name,123);
 
     // Initialize threads:
-    cout <<"Starting worker threads"<<endl;
+    cout <<"Initializing Worker Channel...."<<endl;
+    lsp_worker_create(host_name, port_number); // TCP
     
     // send a join request to the server
+    int msg_length = 1;
+    string request_msg = "join";
+    lsp_worker_write(request_msg,msg_length); // TCP
+
+    uint8_t* serv_response;
+    string received_request = lsp_worker_read(serv_response); // TCP
 
     // ***********************************************************
     // Worker thread implementation
