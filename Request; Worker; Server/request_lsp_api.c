@@ -34,7 +34,7 @@ void* readMessage(void* arg)
 		// sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
 		//get packet from socket
 		// if((num_read = recvfrom(a_request->getReadSocket(), buffer , MAX_BUFFER, 0,	
-		//                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
+	 //                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		// {
 		if((num_read = recvfrom(a_request->getSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
@@ -72,6 +72,12 @@ void* readMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
+		/* check if message is a duplicate or out of order*/
+		if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
+		{
+			// drop the message
+			continue;
+		}
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -80,11 +86,13 @@ void* readMessage(void* arg)
 		}
 		/* check if this is a response to a connection request */
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
-		else if(connid != 0 && seqnum == 0 && payload == "" && a_request->getConnid() == 0)
+		else if(connid != 0 && seqnum == 0 && payload == "")
 		{
 			printf("Connection request response detected\n");
 			a_request->setConnid(connid);
 			a_request->waitingToOutbox();
+			//set connection response received
+			a_request->connectionWasAcknowledged(); 
 		}
 		else if(connid == 0 && seqnum == 0)	// somereason a server sent a message using connid 0
 		{
@@ -94,11 +102,21 @@ void* readMessage(void* arg)
 		{
 			/* Add message to inbox */
 			a_request->toInbox(new lsp_message(connid,seqnum,payload,num_read));
-		
+			
+			// update the last sequnce number from server
+			a_request->increaseLastSeqnum();
+
+			/* keep track of most recently received data message */
+			a_request->setMostRecentMessage(new lsp_message(connid,seqnum,""));	
+
+			// data message has been received
+			a_request->dataMessageWasReceived();
+
 			printf("sending to outbox\n");
 			/* add ACK to outbox */
-			printf("Sending request message to outbox with id: %d\n",connid);
+			printf("Sending ack message to outbox with id: %d\n",connid);
 			a_request->toOutbox(new lsp_message(connid,seqnum,""));	
+
 		}	
 		printf("END OF READ\n");
 	}
@@ -212,8 +230,12 @@ void* writeMessage(void* arg)
 		{
 			printf("Sent: %d bytes\n",sent);
 		}
-		/* set message waiting */
-		a_request->setMessageWaiting(message);
+		//message is not an acknowledgement
+		if(pld != "")
+		{
+			/* set message waiting */
+			a_request->setMessageWaiting(message);
+		}	
 
 		// Free up memory that was allocated while marshalling
 		free (buffer);
@@ -221,7 +243,70 @@ void* writeMessage(void* arg)
 		printf("END OF WRITE\n");
 	}
 }
+
+/* epoch timer will keep track of when no activity has occured for a set amount of time */
+void* epochTimer(void* arg)
+{
+	lsp_request* a_request = (lsp_request*) arg;
+	while(true)
+	{
+		/* only check every so often*/
+		sleep(a_request->getEpoch());
+		
+		/*Resend a connection request, if the original connection request has not yet been acknowledged */
+		if(!a_request->connReqAcknowledged())
+		{
+			printf("resending connection request\n");
+			a_request->toOutbox(new lsp_message(0,0,""));
+		}
+		/*Send an acknowledgment message for the most recently received data message, or an acknowledgment with sequence number 0 if no data messages have been received*/
+		lsp_message* message = a_request->getMostRecentMessage();
+		if(message != NULL)
+		{
+			printf("ack most recent data message\n");
+			a_request->toOutbox(message);
+		}
+		else if(!a_request->dataMessageReceived())
+ 		{
+ 			printf("sending keep alive signal\n");
+ 			a_request->toOutbox(new lsp_message(a_request->getConnid(),0,""));
+		}
+		/*If a data message has been sent, but not yet acknowledged, then resend the data message */
+		if(!a_request->messageAcknowledged())
+		{
+			lsp_message* message = a_request->getMessageWaiting();
+			uint32_t connid = message->m_connid;
+			//increase the number of no responses from a client
+			a_request->noResponse();
+			//determin if the number of no responses is above the threshhold
+			if(a_request->serverAboveThreshhold())
+			{
+				a_request->dropServer();
+			}
+			printf("resending unacknowledged message\n");
+			a_request->toOutbox(a_request->getMessageWaiting());
+		}
+	}
+
+
+}
+
+lsp_request* lsp_request_create_ip(const char* ip, int port);
+
+// if called with a host name
 lsp_request* lsp_request_create(const char* dest, int port)
+{
+	struct hostent* host;
+	if((host = (struct hostent*) gethostbyname(dest))<0)
+	{
+		return NULL;		//server name couldn't be resolved
+	}
+	return lsp_request_create_ip(host->h_addr_list[0], port);
+
+}
+
+// if called with an ip address
+lsp_request* lsp_request_create_ip(const char* ip, int port)
 {
 	lsp_request* newRequest = new lsp_request(); 
 	if(newRequest == NULL)
@@ -230,12 +315,8 @@ lsp_request* lsp_request_create(const char* dest, int port)
 		delete newRequest;
 		return NULL;		//return NULL if memory could not be allocated
 	}
-	struct hostent* host;
-	if((host = (struct hostent*) gethostbyname(dest))<0)
-	{
-		return NULL;		//server name couldn't be resolved
-	}
-	string ip = "127.0.0.1"; //temp
+	
+	// string ip = "127.0.0.1"; //temp
 
 	// /* create socket for reading */
 	// newRequest->setReadPort(1333); // this needs to be dynamic
@@ -300,7 +381,7 @@ lsp_request* lsp_request_create(const char* dest, int port)
   	/* create Serv address */
   	struct sockaddr_in tempServ;
   	// tempServ.sin_family = AF_INET;
-  	tempServ.sin_addr.s_addr = inet_addr(ip.c_str());
+  	tempServ.sin_addr.s_addr = inet_addr(ip);
   	tempServ.sin_port = htons(port);
   	newRequest->setServAddr(tempServ);
 
@@ -338,6 +419,20 @@ lsp_request* lsp_request_create(const char* dest, int port)
 		return NULL;
 	}
 
+	/* start a thread that will maintain an epoch timer */
+	pthread_t epochThread = newRequest->getEpochThread();
+	if( (pthread_create(&epochThread, NULL, epochTimer, (void*)(newRequest))) < 0)
+	{
+		perror("Epoch Pthread create failed");
+		delete newRequest;
+		return NULL;
+	}
+	else if((pthread_detach(newRequest->getEpochThread())) < 0)
+	{
+		perror("Write Pthread detach failed");
+		delete newRequest;
+		return NULL;
+	}
 
 	/* send new connection request */
 	newRequest->toOutbox(new lsp_message(newRequest->getConnid(), newRequest->nextSeq(),""));

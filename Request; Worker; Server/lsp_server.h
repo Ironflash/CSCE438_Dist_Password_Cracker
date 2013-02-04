@@ -1,12 +1,26 @@
 #include <queue>
 #include <map>
+#include <vector>
 #include <pthread.h>
 
 /* Used to group together addr and socket of clients */
 struct clientConnection
 {
 	sockaddr_in* addr;
-	int socket;
+	uint32_t seqnum;
+	int numNoResponses;
+	int numNoKeepAlive;
+	bool dataSent;
+	bool keepAlive;
+
+	clientConnection()
+	{
+		numNoResponses = 0;
+		numNoKeepAlive = 0;
+		seqnum = 0;
+		dataSent = false;
+		keepAlive = false;
+	}
 };
 
 class lsp_server
@@ -25,10 +39,16 @@ private:
 	std::queue<lsp_message*> m_outbox;
 	std::queue<uint32_t> m_reqDis;		//store connection ids of disconnected requests
 	std::queue<uint32_t> m_workDis;		//store connection ids of disconnected workers
-	std::map<uint32_t, clientConnection> m_cliAddresses;
+	std::map<uint32_t, clientConnection> m_cliAddresses;	//keeps track of id to client addr
+	std::vector<uint32_t> m_requestIds;		// list of request ids
+	std::vector<uint32_t> m_workerIds;		// list of worker ids
+	std::vector<uint32_t> m_requestDisconnects;		// list of the ids of requests that have been dropped
+	std::vector<uint32_t> m_workerDisconnects;		// list of the ids of workers that have been dropped
+	std::vector<uint32_t> m_awaitingMessages;		// list of clients that have connected and not sent a data message
 	pthread_t 	m_readReqThread;
 	pthread_t 	m_readWorkThread;
 	pthread_t   m_writeThread;
+	pthread_t   m_epochThread;
 	uint32_t m_nextSeqnum;
 	uint32_t m_nextReqId;		//next connection id to be assigned to request
 	uint32_t m_nextWorkId;		//next connection id to be assigned to worker
@@ -36,8 +56,12 @@ private:
 	// pthread_mutex_t m_outboxLock;
 	pthread_mutex_t m_waitingMessageLock;
 	lsp_message* m_messageWaiting;	// message waiting for an acknowledgment
+	lsp_message* m_mostRecentMessage;
 	bool m_messageAcknowledged;		// has last message been acknowledged
-	bool m_isMessageWaiting;
+	// bool m_isMessageWaiting;		// keeps track if there is a server message that is awaiting approval
+	int m_epoch;					// the number of seconds between epochs
+	int m_dropThreshhold;			// number of no repsonses before the connection is dropped
+	int m_KAThreshhold;				// number of missed keep alives before the connection is dropped
 public:
 
 	lsp_server()
@@ -46,7 +70,11 @@ public:
 		m_nextReqId = 1;	//Request ids will be odd
 		m_nextWorkId = 2;	//Worker ids will be even
 		m_messageAcknowledged = true;
-		m_isMessageWaiting = false;
+		// m_isMessageWaiting = false;
+		m_mostRecentMessage = NULL;
+		m_epoch = 2;		// epoch defaults to intervals of 2 seconds
+		m_dropThreshhold = 5;		// default is 5 times
+		m_KAThreshhold = 5;			// default is 5 times
 		// pthread_mutex_init(&m_inboxLock, NULL);
 		// pthread_mutex_init(&m_outboxLock, NULL);
 		pthread_mutex_init(&m_waitingMessageLock, NULL);
@@ -107,6 +135,15 @@ public:
 		m_writeAddr = servaddr;
 	}  
 
+	void setEpoch(int seconds)
+	{
+		m_epoch = seconds;
+	}
+
+	void setDropThreshhold(int num)
+	{
+		m_dropThreshhold = num;
+	}
 
 	void toCliAddr(uint32_t connid, sockaddr_in* addr)
 	{
@@ -115,11 +152,11 @@ public:
 
 	void toInbox(lsp_message* message)
 	{
-		printf("Attempting to add to inbox\n");
+		// printf("Attempting to add to inbox\n");
 		// pthread_mutex_lock(&m_inboxLock);
 		m_inbox.push(message);
 		// pthread_mutex_unlock(&m_inboxLock);
-		printf("Added to inbox\n");
+		// printf("Added to inbox\n");
 	}
 
 	void toOutbox(lsp_message* message)
@@ -133,8 +170,24 @@ public:
 	{
 		pthread_mutex_lock(&m_waitingMessageLock);
 		m_messageWaiting = message;
-		m_isMessageWaiting = true;
+		// m_isMessageWaiting = true;
+		m_messageAcknowledged = false;
 		pthread_mutex_unlock(&m_waitingMessageLock);
+	}
+
+	void setMostRecentMessage(lsp_message* message)
+	{
+		m_mostRecentMessage = new lsp_message(*message);
+	}
+
+	void addRequest(uint32_t connid)
+	{
+		m_requestIds.push_back(connid);
+	}
+
+	void addWorker(uint32_t connid)
+	{
+		m_workerIds.push_back(connid);
 	}
 
 	/* getters */
@@ -186,11 +239,37 @@ public:
 
 	sockaddr_in* getCliAddr(uint32_t connid) 
 	{
+		printf("num cli: %d\n",m_cliAddresses.size());
 		if(m_cliAddresses.empty())
+		{
+			printf("cliAddresses empty\n");
+			return NULL;
+		}
+		else
+		{
+			printf("cliAddresses not empty\n");
+		}
+		// client no longer exists
+		printf("num of clients with address %d: %d",connid,m_cliAddresses.count(connid));
+		if(m_cliAddresses.count(connid) == 0)
 		{
 			return NULL;
 		}
 		sockaddr_in* result = m_cliAddresses[connid].addr;
+		return result;
+	}
+
+	uint32_t getCliSeqnum(uint32_t connid)
+	{
+		if(m_cliAddresses.empty())
+		{
+			return -1;
+		}
+		if(m_cliAddresses.count(connid) == 0)
+		{
+			return -1;
+		}
+		uint32_t result = m_cliAddresses[connid].seqnum;
 		return result;
 	}
 
@@ -207,6 +286,51 @@ public:
 	pthread_t getWriteThread() const
 	{
 		return m_writeThread;
+	}
+
+	pthread_t getEpochThread() const
+	{
+		return m_epochThread;
+	}
+
+	std::vector<uint32_t> getRequests()
+	{
+		return m_requestIds;
+	}
+
+	std::vector<uint32_t> getWorkers()
+	{
+		return m_workerIds;
+	}
+
+	lsp_message* getMessageWaiting()
+	{
+		return m_messageWaiting;
+	}
+
+	lsp_message* getMostRecentMessage() const
+	{
+		return m_mostRecentMessage;
+	}
+
+	int getEpoch() const
+	{
+		return m_epoch;
+	}	
+	// return list of request ids that have disconnected since the last time checked
+	std::vector<uint32_t> getRequestDis()
+	{
+		std::vector<uint32_t> result = m_requestDisconnects;
+		m_requestDisconnects.clear();
+		return result;
+	}
+
+	//return list of worker ids that have disconnected since the last time checked
+	std::vector<uint32_t> getWorkerDis()
+	{
+		std::vector<uint32_t> result = m_workerDisconnects;
+		m_workerDisconnects.clear();
+		return result;
 	}
 
 	lsp_message* fromInbox()
@@ -279,8 +403,12 @@ public:
 	/* map remove */
 	void removeCliAddr(uint32_t connid)
 	{
-		std::map<uint32_t, clientConnection>::iterator it = m_cliAddresses.find(connid);
-		m_cliAddresses.erase(it);
+		if(m_cliAddresses.count(connid) > 0)
+		{
+			printf("removeing addr\n");
+			std::map<uint32_t, clientConnection>::iterator it = m_cliAddresses.find(connid);
+			m_cliAddresses.erase(it);
+		}
 	}
 
 
@@ -301,14 +429,13 @@ public:
 		/* if message Waiting is null then it isn't an acknowledgement */
 		if(m_messageWaiting == NULL)
 		{
-			printf("Reached inner\n");
 			pthread_mutex_unlock(&m_waitingMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_messageWaiting->m_connid);
+		// printf("Message Waiting id: %d\n",m_messageWaiting->m_connid);
 		m_messageAcknowledged = (m_messageWaiting->m_connid == connid && m_messageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingMessageLock);
-		printf("Reached 2\n");
+		// printf("Reached 2\n");
 		return;
 	}
 	bool messageAcknowledged()
@@ -319,6 +446,156 @@ public:
 	{
 		return (m_messageWaiting != NULL);
 	}
+
+	// determines if a request with the given id has been disconnected
+	bool requestDis(uint32_t connid)
+	{
+		for(int i = 0; i < m_requestDisconnects.size(); i++)
+		{
+			if(m_requestDisconnects[i] == connid)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// determines if a worker with the given id has been disconnected
+	bool workerDis(uint32_t connid)
+	{
+		for(int i = 0; i < m_workerDisconnects.size(); i++)
+		{
+			if(m_workerDisconnects[i] == connid)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void updateClientSeqnum(uint32_t connid,uint32_t seqnum)
+	{
+		m_cliAddresses[connid].seqnum = seqnum;
+		
+	}
+
+	void noResponse(uint32_t connid)
+	{
+		m_cliAddresses[connid].numNoResponses++;
+	}
+
+	bool clientAboveThreshhold(uint32_t connid)
+	{
+		if(m_cliAddresses.count(connid) == 0)
+		{
+			return false;
+		}
+		return m_cliAddresses[connid].numNoResponses > m_dropThreshhold;
+	}
+
+	void dropClient(uint32_t connid)
+	{
+		/* remove the cli from the list of clients */
+		removeCliAddr(connid);
+		//if the connection id is even and therefore a worker
+		if(connid % 2 == 0)
+		{
+			printf("dropping worker\n");
+			//add to list of disconnected workers
+			m_workerDisconnects.push_back(connid);
+			//put id up for re-assignment
+			m_workDis.push(connid);
+			//remove from list of current workers
+			std::vector<uint32_t>::iterator it;
+			it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
+			m_workerIds.erase(it);
+		}
+		else	// the connection id is for a request
+		{
+			printf("dropping request\n");
+			//add to list of disconnected workers
+			m_requestDisconnects.push_back(connid);
+			//put id up for re-assignment
+			m_reqDis.push(connid);
+			//remove from list of current workers
+			std::vector<uint32_t>::iterator it;
+			it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
+			m_requestIds.erase(it);
+		}
+		
+		//required so that the server will go on and not wait for a reply
+		m_messageAcknowledged = true;
+	}
+
+	bool dataSentTo(uint32_t connid)
+	{
+		if(m_cliAddresses.count(connid) > 0)
+		{
+			return m_cliAddresses[connid].dataSent;
+		}
+	}
+
+	void dataWasSentTo(uint32_t connid)
+	{
+		m_cliAddresses[connid].dataSent = true;
+	}
+
+	bool keepAliveReceived(uint32_t connid)
+	{
+		if(m_cliAddresses.count(connid) == 0)
+		{
+			return false;
+		}
+		bool result = m_cliAddresses[connid].keepAlive;
+		//reset for next keep alive message
+		m_cliAddresses[connid].keepAlive = false;
+		return result;
+	}
+
+	void receivedKeepAlive(uint32_t connid)
+	{
+		//reset num no keep alive 
+		printf("num keep alive reset\n");
+		m_cliAddresses[connid].numNoKeepAlive = 0;
+		m_cliAddresses[connid].keepAlive = true;
+	}
+
+	void incNoKeepAlive(uint32_t connid)
+	{
+		if(m_cliAddresses.count(connid) > 0)
+		{
+			m_cliAddresses[connid].numNoKeepAlive++;
+		}
+	}
+
+	bool clientAboveKAThreshhold(uint32_t connid)
+	{
+		if(m_cliAddresses.count(connid) == 0)
+		{
+			return false;
+		}
+		return m_cliAddresses[connid].numNoKeepAlive >  m_KAThreshhold;
+	}
+
+	/* awaiting message functions */
+	void awaitingMessage(uint32_t connid)
+	{
+		m_awaitingMessages.push_back(connid);
+	}
+
+	void removeAwaitingMessage(uint32_t connid)
+	{
+		std::vector<uint32_t>::iterator it;
+		it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
+		m_awaitingMessages.erase(it);
+	}
+
+	std::vector<uint32_t> getAwaitingMessages() const
+	{
+		return m_awaitingMessages;
+	}
+
+
 };
 
 

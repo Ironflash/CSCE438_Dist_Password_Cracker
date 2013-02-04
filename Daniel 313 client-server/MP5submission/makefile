@@ -30,13 +30,13 @@ netreqchannel.o: netreqchannel.H netreqchannel.C
 	g++ -c -g netreqchannel.C
 
 dataserver: dataserver.C netreqchannel.o
-	g++ -g -o dataserver dataserver.C netreqchannel.o -lsocket -lnsl
+	g++ -g -o dataserver dataserver.C netreqchannel.o
 
 simpleclient: simpleclient.C netreqchannel.o semaphore.o
-	g++ -g -o simpleclient simpleclient.C netreqchannel.o semaphore.o -lsocket -lnsl
+	g++ -g -o simpleclient simpleclient.C netreqchannel.o semaphore.o
 	
 client: client.C netreqchannel.o semaphore.o
-	g++ -g -o client client.C netreqchannel.o semaphore.o -lsocket -lnsl
+	g++ -g -o client client.C netreqchannel.o semaphore.o
 			
 mp5_test:
 	clear

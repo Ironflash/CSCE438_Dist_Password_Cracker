@@ -19,20 +19,35 @@ private:
 	uint32_t m_connid;		//the connection id 
 	pthread_t 	m_readThread;
 	pthread_t   m_writeThread;
+	pthread_t   m_epochThread;
 	pthread_mutex_t m_waitingMessageLock;
 	pthread_mutex_t m_outboxLock;
 	lsp_message* m_messageWaiting;	// message waiting for an acknowledgment
+	lsp_message* m_mostRecentMessage;
 	bool m_messageAcknowledged;		// has last message been acknowledged
-	bool m_isMessageWaiting;
+	// bool m_isMessageWaiting;
+	bool m_connectionAcknowledged;
+	bool m_dataMessRcvd;
 	uint32_t m_nextSeqnum;
+	uint32_t m_lastServerSeqnum;	// the last sequence number recieved from the server
+	int m_epoch;					// the number of seconds between epochs
+	int m_numNoResponses;
+	int m_dropThreshhold;			// number of no repsonses before the connection is dropped
 public:
 
 	lsp_request()
 	{
 		m_connid = 0;
 		m_nextSeqnum = 0;
+		m_lastServerSeqnum = 0;
+		m_numNoResponses = 0;
+		m_epoch = 2;		// epoch defaults to intervals of 2 seconds
+		m_dropThreshhold = 5; // default is 5 no responses
 		m_messageAcknowledged = true;
-		m_isMessageWaiting = false;
+		m_dataMessRcvd = false;
+		m_mostRecentMessage = NULL;
+		// m_isMessageWaiting = false;
+		m_connectionAcknowledged = false;
 		pthread_mutex_init(&m_waitingMessageLock, NULL);
 		pthread_mutex_init(&m_outboxLock, NULL);
 	}
@@ -108,6 +123,21 @@ public:
 		m_connid = connid;
 	}
 
+	void setEpoch(int seconds)
+	{
+		m_epoch = seconds;
+	}
+
+	void setDropThreshhold(int num)
+	{
+		m_dropThreshhold = num;
+	}
+
+	void setMostRecentMessage(lsp_message* message)
+	{
+		m_mostRecentMessage = new lsp_message(*message);
+	}
+
 	void toInbox(lsp_message* message)
 	{
 		printf("Attempting to add to inbox\n");
@@ -132,8 +162,14 @@ public:
 	{
 		pthread_mutex_lock(&m_waitingMessageLock);
 		m_messageWaiting = message;
-		m_isMessageWaiting = true;
+		// m_isMessageWaiting = true;
+		m_messageAcknowledged = false;
 		pthread_mutex_unlock(&m_waitingMessageLock);
+	}
+
+	void increaseLastSeqnum()
+	{
+		m_lastServerSeqnum++;
 	}
 
 	/* getters */
@@ -202,6 +238,31 @@ public:
 	pthread_t getWriteThread() const
 	{
 		return m_writeThread;
+	}
+
+	pthread_t getEpochThread() const
+	{
+		return m_epochThread;
+	}
+
+	uint32_t getLastSeqnum() const
+	{
+		return m_lastServerSeqnum;
+	}
+
+	int getEpoch() const
+	{
+		return m_epoch;
+	}	
+
+	lsp_message* getMostRecentMessage() const
+	{
+		return m_mostRecentMessage;
+	}
+
+	lsp_message* getMessageWaiting()
+	{
+		return m_messageWaiting;
 	}
 
 	lsp_message* fromInbox()
@@ -273,5 +334,53 @@ public:
 			m_waitbox.pop();
 		}
 		// pthread_mutex_unlock(&m_outboxLock);
+	}
+
+	void connectionWasAcknowledged()
+	{
+		m_messageAcknowledged = true;
+	}
+
+	bool connReqAcknowledged() const
+	{
+		return m_messageAcknowledged;
+	}
+
+	void dataMessageWasReceived()
+	{
+		m_dataMessRcvd = true;
+	}
+
+	bool dataMessageReceived() const
+	{
+		return m_dataMessRcvd;
+	}
+
+	void noResponse()
+	{
+		m_numNoResponses++;
+	}
+
+	bool serverAboveThreshhold()
+	{
+		return m_numNoResponses > m_dropThreshhold;
+	}
+
+	void dropServer()
+	{
+
+		// 	//add to list of disconnected workers
+		// 	m_requestDisconnects.push_back(connid);
+		// 	//put id up for re-assignment
+		// 	m_reqDis.push(connid);
+		// 	//remove from list of current workers
+		// 	std::vector<uint32_t>::iterator it;
+		// 	it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
+		// 	m_requestIds.erase(it);
+		// /* remove the cli from the list of clients */
+		// removeCliAddr(connid);
+		// //required so that the server will go on and not wait for a reply
+		// m_messageAcknowledged = true;
+		//do something
 	}
 };

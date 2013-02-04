@@ -14,7 +14,10 @@
 /*--------------------------------------------------------------------------*/
 
 #include <iostream>
-#include "server_lsp_api.c"
+//#include "server_lsp_api.c"
+
+#include <errno.h>
+#include "netreqchannel.h"
 
 using namespace std;
 
@@ -24,6 +27,51 @@ using namespace std;
 
 // Create Server
 struct lsp_server* server_channel;
+
+const int MAX_MESSAGE = 255;
+
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- TCP Socket Read/Write */
+/*--------------------------------------------------------------------------*/
+
+string socket_read(int * _fd) {
+  char buf[MAX_MESSAGE];
+  
+  int is_read_error = read(* _fd, buf, MAX_MESSAGE); // read from file descriptor
+
+  if ((is_read_error < 0) && (errno == EINTR)) { // interrupted by signal; continue monitoring
+    cout<<"signal interrupt"<<endl;
+    socket_read(_fd);
+  } else if (is_read_error < 0) {
+    perror(string("Request Channel ERROR: Failed reading from socket!").c_str());
+  }
+  
+  string s = buf;
+  return s;
+}
+
+int socket_write(string _msg, int * _fd) {
+  if (_msg.length() >= MAX_MESSAGE) {
+    cerr << "Message too long for Channel!\n";
+    return -1;
+  }
+  const char * s = _msg.c_str();
+
+  int is_write_error = write(* _fd, s, strlen(s)+1);
+
+  if ((is_write_error < 0) && (errno == EINTR)) { // interrupted by signal; continue monitoring
+    cout<<"signal interrupt"<<endl;
+    socket_write(_msg, _fd);
+  } else if (is_write_error < 0) {
+    perror(string("Request Channel ERROR: Failed writing to socket!").c_str());
+  }
+}
+
+/*--------------------------------------------------------------------------*/
+/* FORWARDS */
+/*--------------------------------------------------------------------------*/
+
+void handle_process_loop(int * _fd);
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
@@ -44,13 +92,58 @@ void server_loop() {
 	//*/
 }
 
+void * handle_data_requests(void * args) {
+  //nthreads++;
+  //cout<<"Starting thread, with ID: "<<pthread_self()<<endl;
+  int * socket = (int *) args;
+
+  // -- Handle client requests on this channel. 
+  
+  handle_process_loop(socket);
+
+  // -- Client has quit. We remove channel.
+
+  //cout<<"Closing thread, with ID: "<<pthread_self()<<endl;
+  //close(*socket);
+  //delete socket;
+  pthread_exit(NULL);
+}
+
+void process_request(int * _fd, const string & _request) {
+	if (_request.length() == 40) {
+		socket_write("****Server successfully received hash****", _fd);
+		usleep(1000);
+		socket_write("test", _fd);
+	} else {
+		socket_write("INVALID hash signature", _fd);
+	}
+}
+
+void handle_process_loop(int * _fd) {
+
+  for(;;) {
+
+    string request = socket_read(_fd);
+    //cout << "done." << endl;
+    //cout << "New request is " << request << endl;
+
+    if (request.compare("quit") == 0) {
+      socket_write("bye", _fd);
+      usleep(10000);          // give the other end a bit of time.
+      break;                  // break out of the loop;
+    }
+
+    process_request(_fd, request);
+  }
+}
+
 /*--------------------------------------------------------------------------*/
 /* MAIN FUNCTION */
 /*--------------------------------------------------------------------------*/
 
 int main(int argc, char **argv) {
 
-	unsigned short port_number = 123;
+	unsigned short port_number = 7000;
 
 	// ***********************************************************
     // getopt code
@@ -87,7 +180,9 @@ int main(int argc, char **argv) {
 
     // ***********************************************************
     // Implement LSP eventually
-    server_channel = lsp_server_create(port_number);
+    // server_channel = lsp_server_create(port_number); // UDP-LSP
+    NetworkRequestChannel* server_channel;
+    server_channel = lsp_server_create(port_number, handle_data_requests);
 
     string input;
     uint32_t fake_id = 0;
@@ -95,6 +190,7 @@ int main(int argc, char **argv) {
 	//int num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
 	int num_read;
 	int answer_length = 4;
+	/*
 	while(true) {
 		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
 		if(num_read > 0) {
@@ -109,6 +205,7 @@ int main(int argc, char **argv) {
 			}
 		}
 	}
+	//*/
 	cout<<"EXIT WHILE loop =) "<<endl;
 	for (;;){
 	}
@@ -119,7 +216,7 @@ int main(int argc, char **argv) {
 	uint32_t fake_id = 0;
 	// int num_read = lsp_server_read(serv,(void*) &input, &fake_id);
 	int num_read;
-	*/
+	//*/
 	// ***********************************************************
 
 
@@ -129,7 +226,8 @@ int main(int argc, char **argv) {
 	// ***********************************************************
 
 	// Close the server when done
-	lsp_server_close(server_channel,1); //1 is just for testing needs to change
+	// lsp_server_close(server_channel,1); // UDP-LSP 1 is just for testing needs to change
+	// lsp_server_close(server_channel,1); // TCP
 	cout<<"Server main completed successfully"<<endl;
 	usleep(1000000);
 	// ***********************************************************
