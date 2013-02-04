@@ -72,12 +72,7 @@ void* readMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
-		/* check if message is a duplicate or out of order*/
-		// if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
-		// {
-		// 	// drop the message
-		// 	continue;
-		// }
+		
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -100,6 +95,12 @@ void* readMessage(void* arg)
 		}
 		else // is a normal message
 		{
+			/* check if message is a duplicate or out of order*/
+			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
+			{
+				// drop the message
+				continue;
+			}
 			/* Add message to inbox */
 			a_request->toInbox(new lsp_message(connid,seqnum,payload,num_read));
 			
@@ -384,8 +385,8 @@ lsp_request* lsp_request_create(const char* dest, int port)
   	/* create Serv address */
   	struct sockaddr_in tempServ;
   	// tempServ.sin_family = AF_INET;
-  	// tempServ.sin_addr.s_addr = inet_addr(host->h_addr_list[0]); // uncomment for use on multiple machines
-  	tempServ.sin_addr.s_addr = inet_addr(ip.c_str()); // comment for use on multiple machines
+  	tempServ.sin_addr.s_addr = inet_addr(host->h_addr); // uncomment for use on multiple machines
+  	// tempServ.sin_addr.s_addr = inet_addr(ip.c_str()); // comment for use on multiple machines
   	tempServ.sin_port = htons(port);
   	newRequest->setServAddr(tempServ);
 

@@ -74,12 +74,7 @@ void* readReqMessage(void* arg)
 			printf("received keep alive\n");
 			a_srv->receivedKeepAlive(connid);
 		}
-		/* check if message is a duplicate or out of order*/
-		// if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
-		// {
-		// 	// drop the message
-		// 	continue;
-		// }
+		
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -123,6 +118,12 @@ void* readReqMessage(void* arg)
 		}
 		else
 		{
+			/* check if message is a duplicate or out of order*/
+			if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
+			{
+				// drop the message
+				continue;
+			}
 			/* Add message to inbox */
 			a_srv->toInbox(new lsp_message(connid,seqnum,payload,num_read));
 
@@ -201,12 +202,6 @@ void* readWorkMessage(void* arg)
 			printf("received keep alive\n");
 			a_srv->receivedKeepAlive(connid);
 		}
-		/* check if message is a duplicate or out of order*/
-		if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
-		{
-			// drop the message
-			continue;
-		}
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -247,6 +242,12 @@ void* readWorkMessage(void* arg)
 		}
 		else
 		{
+			/* check if message is a duplicate or out of order*/
+			if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
+			{
+				// drop the message
+				continue;
+			}
 			/* Add message to inbox */
 			a_srv->toInbox(new lsp_message(connid,seqnum,payload,num_read));
 
