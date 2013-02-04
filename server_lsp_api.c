@@ -75,11 +75,11 @@ void* readReqMessage(void* arg)
 			a_srv->receivedKeepAlive(connid);
 		}
 		/* check if message is a duplicate or out of order*/
-		if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
-		{
-			// drop the message
-			continue;
-		}
+		// if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
+		// {
+		// 	// drop the message
+		// 	continue;
+		// }
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -591,9 +591,10 @@ int lsp_server_read(lsp_server* a_srv, void* pld, uint32_t* conn_id)
 }
 
 // Server Write. Should not send NULL
-bool lsp_server_write(lsp_server* a_srv, void* pld, int lth, uint32_t conn_id)
+// bool lsp_server_write(lsp_server* a_srv, void* pld, int lth, uint32_t conn_id)
+bool lsp_server_write(lsp_server* a_srv, string payload, int lth, uint32_t conn_id)
 {
-	string payload = *((string*)pld);
+	// string payload = *((string*)pld);
 	/*perform check on input*/
 
 	if(a_srv->requestDis(conn_id) || a_srv->workerDis(conn_id))

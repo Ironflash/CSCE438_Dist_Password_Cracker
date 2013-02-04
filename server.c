@@ -15,6 +15,8 @@ int main()
 		if(num_read > 0)
 		{
 			printf("From Client: %s\n",input.c_str());
+			string returnString = input + " back at you!";
+			lsp_server_write(serv,returnString,0,fake_id);
 		}
 	} 
 	/* Close the server when done */
