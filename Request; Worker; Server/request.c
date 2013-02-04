@@ -14,8 +14,8 @@
 /*--------------------------------------------------------------------------*/
 
 #include <iostream>
-//#include "request_lsp_api.c"
-#include "netreqchannel.h"
+#include "request_lsp_api.c"
+//#include "netreqchannel.h"
 
 using namespace std;
 
@@ -41,7 +41,7 @@ static struct lsp_request* request_channel;
 int main(int argc, char **argv) {
     
     const char * host_name = "localhost";
-    unsigned short port_number = 7000;
+    unsigned short port_number = 1234;
 
     // "test" = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
     string request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
@@ -98,23 +98,34 @@ int main(int argc, char **argv) {
     // Initialize Request Client-Server Communication Channel
     cout <<"Initializing Request Channel...."<<endl;
     
-    //request_channel = lsp_request_create(host_name, port_number); // UDP-LSP
-    lsp_request_create(host_name, port_number); // TCP
+    request_channel = lsp_request_create(host_name, port_number); // UDP-LSP
+    //lsp_request_create(host_name, port_number); // TCP
 
     int msg_cnt = 0;
-    //lsp_request_write(request_channel,request_msg,msg_length);
-    lsp_request_write(request_msg,msg_length); // TCP
+    lsp_request_write(request_channel,request_msg,msg_length);
+    //lsp_request_write(request_msg,msg_length); // TCP
     
     uint8_t* serv_response;
     int reading;
-    string password = lsp_request_read(serv_response); // TCP
-    cout<<"!!! Password cracked !!!"<<endl;
-    cout<<"Password: "<<password<<endl;
+    //string password = lsp_request_read(serv_response); // TCP
+    //cout<<"!!! Password cracked !!!"<<endl;
+    //cout<<"Password: "<<input.c_str()<<endl;
+    string input;
+    while(true) {
+        int numRead = lsp_request_read(request_channel,(void*) &input);
+        if(numRead > 0) {
+            //printf("From Server: %s\n",input.c_str());
+            cout<<"!!! Password cracked !!!"<<endl;
+            cout<<"Password: "<<input.c_str()<<endl;
+            break;
+        }
+
+    }
 
 	// ***********************************************************
     // Close the request client when done
-    // lsp_request_close(request_channel); // UDP-LSP
-    lsp_request_close(); // TCP
+    lsp_request_close(request_channel); // UDP-LSP
+    //lsp_request_close(); // TCP
     cout<<"Request client main completed successfully"<<endl;
     usleep(1000000);
     // ***********************************************************

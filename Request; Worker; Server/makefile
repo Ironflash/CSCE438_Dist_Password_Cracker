@@ -4,8 +4,6 @@
 # hw2_client: server request
 hw2_client: request worker
 
-req_client: request
-
 hw2_server: server
 
 semaphore.o: semaphore.H semaphore.C
@@ -25,15 +23,16 @@ tserver: server.c netreqchannel.o
 
 #request: request.c semaphore.o
 request: request.c
-	g++ request.c lspMessage.pb.cc -o request -lprotobuf -lpthread
+	g++ -g request.c lspMessage.pb.cc -o request -lprotobuf -lpthread
 #	g++ -g -o request request.c lspMessage.pb.cc -lprotobuf -lpthread
 
 worker: worker.c
-	g++ -g -o worker worker.c	
+	g++ -g worker.c lspMessage.pb.cc -o worker -lprotobuf -lpthread
+# 	g++ -g -o worker worker.c
 
 #server: server.c semaphore.o
 server: server.c
-	g++ server.c lspMessage.pb.cc -o server -lprotobuf -lpthread
+	g++ -g server.c lspMessage.pb.cc -o server -lprotobuf -lpthread
 
 hw2:
 	clear
@@ -63,7 +62,13 @@ hw2r:
 	clear
 	rm -f *o request request_lsp_api core
 	rm -f fifo*
-	make req_client
+	make request
+
+hw2w:
+	clear
+	rm -f *o worker worker_lsp_api core
+	rm -f fifo*
+	make worker
 
 hw2s:
 	clear

@@ -14,11 +14,12 @@
 /*--------------------------------------------------------------------------*/
 
 #include <iostream>
-//#include "server_lsp_api.c"
+#include "server_lsp_api.c"
 
+#include <pthread.h>
 #include <queue>
 #include <errno.h>
-#include "netreqchannel.h"
+//#include "netreqchannel.h"
 
 using namespace std;
 
@@ -30,8 +31,10 @@ using namespace std;
 struct lsp_server* server_channel;
 
 const int MAX_MESSAGE = 255;
-queue<int*> requesters;
-queue<int*> workers;
+//queue<int*> requesters;
+//queue<int*> workers;
+queue<uint32_t> requesters;
+queue<uint32_t> workers;
 static int number_available_workers = 0;
 
 /*--------------------------------------------------------------------------*/
@@ -75,29 +78,35 @@ int socket_write(string _msg, int * _fd) {
 /* FORWARDS */
 /*--------------------------------------------------------------------------*/
 
-void handle_process_loop(int * _fd);
+//void handle_process_loop(int * _fd);
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
 
-void get_available_worker(string request) {
-	cout<<"Give this to the next available worker: "<<request<<endl;
+void * get_available_worker(void * args) {
+//void get_available_worker(string request) {
+	string * request = (string *) args;
+
+	cout<<"Give this to the next available worker: "<<*request<<endl;
 	for (;;) {
 		if (number_available_workers > 0) {
-			cout<<"****Giving request ("<<request<<") to worker # "<<workers.front()<<endl;
+			cout<<"****Giving request ("<<*request<<") to worker # "<<workers.front()<<endl;
 			cout<<"workers size = "<<number_available_workers;
-			int * _fd = (int *)workers.front();
-			cout<<"worker fd to pop = "<<*(_fd)<<endl;
-			socket_write(request, _fd);
+			uint32_t worker_id = workers.front();
+			cout<<"worker fd to pop = "<<worker_id<<endl;
+			//socket_write(request, _fd);
 			workers.pop();
 			number_available_workers = workers.size();
 			cout<<"workers size = "<<number_available_workers;
+
+			lsp_server_write(server_channel,*request,0,worker_id);
 			break;
 		}
 	}
+	pthread_exit(NULL);
 }
-
+/*
 void * handle_data_requests(void * args) {
   //nthreads++;
   //cout<<"Starting thread, with ID: "<<pthread_self()<<endl;
@@ -150,6 +159,29 @@ void handle_process_loop(int * _fd) {
     process_request(_fd, request);
   }
 }
+//*/
+
+void process_request_udp(uint32_t client_id, string * message){
+	//From requester or worker?
+	cout<<"******Requester OR Worker?******"<<endl;
+	if ((*message).length() == 40) { // From requester
+		cout<<"******REQUESTER******"<<endl;
+		requesters.push(client_id);
+		cout<<"Send request to worker"<<endl;
+		pthread_t thread_id;
+  		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
+		//get_available_worker(message);
+		//string returnString = input + " back at you!";
+		//lsp_server_write(server_channel,returnString,0,fake_id);
+	} else if ((*message) == "join") {
+		cout<<"******WORKER******"<<endl;
+		workers.push(client_id);
+		cout<<"pushing worker (address): "<<client_id<<endl;
+		number_available_workers = workers.size();
+	} else {
+	}
+}
+
 
 /*--------------------------------------------------------------------------*/
 /* MAIN FUNCTION */
@@ -194,9 +226,9 @@ int main(int argc, char **argv) {
 
     // ***********************************************************
     // Implement LSP eventually
-    // server_channel = lsp_server_create(port_number); // UDP-LSP
-    NetworkRequestChannel* server_channel;
-    server_channel = lsp_server_create(port_number, handle_data_requests);
+    server_channel = lsp_server_create(port_number); // UDP-LSP
+    //NetworkRequestChannel* server_channel;
+    //server_channel = lsp_server_create(port_number, handle_data_requests);
 
     string input;
     uint32_t fake_id = 0;
@@ -204,19 +236,15 @@ int main(int argc, char **argv) {
 	//int num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
 	int num_read;
 	int answer_length = 4;
-	/*
 	while(true) {
+		//cout<<"!!!!!!!!!!!!! Attempting to read !!!!!!!!!!!!!"<<endl;
 		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
 		if(num_read > 0) {
-			cout<<"From Client (ID="<<fake_id<<"): "<<input.c_str()<<endl;
-			//usleep(1000000);
-			//cout<<"response to: "<<fake_id<<endl;
-			string answer = "test";
-			lsp_server_write(server_channel, &answer, answer_length, fake_id);
-			//break;
-			for (;;){
-				//block
-			}
+			cout<<"*********Received a Request*********"<<endl;
+			string * process = new string;
+			*process = input;
+			process_request_udp(fake_id, process);
+			//process_request_udp(fake_id, &input);
 		}
 	}
 	//*/

@@ -15,10 +15,10 @@
 
 #include <string>
 #include <iostream>
-//#include "worker_lsp_api.c"
+#include "worker_lsp_api.c"
 
 // netreqchannel.h for temporary read/write to inbox/outbox
-#include "netreqchannel.h"
+//#include "netreqchannel.h"
 
 using namespace std;
 
@@ -32,11 +32,31 @@ static pthread_t *w_threads;
 
 // INCOMPLETE: these will be called when LSP is complete
 // Create Request Client-Server Communication channel
-static struct lsp_worker* worker_channel;
+static struct lsp_request* worker_channel;
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
+
+void password_cracker(string hash) {
+    // write the algorithm for password cracking
+    // for loop - iterate from a-z, aa-zz, .. aaaaaa - zzzzzz
+    // password found
+    string found = "Found: ";
+    string password = "test";
+    // password not found: answer = Not found
+    string answer = found+password;
+    cout<<"FOUND PASSWORD: "<<password<<endl;
+    lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
+}
+
+void send_join_request(){
+    // send a join request to the server
+    int msg_length = 4;
+    string request_msg = "join";
+    //lsp_request_write(request_msg,msg_length); // TCP
+    lsp_request_write(worker_channel,request_msg,msg_length); //UDP-LSP
+}
 
 //313 worker thread/event handler functions:
 
@@ -213,7 +233,7 @@ int main(int argc, char **argv) {
     number_of_worker_threads = 2;
 
     const char * host_name = "localhost";
-    unsigned short port_number = 7000;
+    unsigned short port_number = 1235;
 
     // ***********************************************************
     // getopt code
@@ -261,20 +281,31 @@ int main(int argc, char **argv) {
     pid_t pid;
     w_threads = new pthread_t [number_of_worker_threads];
 
-    // INCOMPLETE: Initialize Worker Client-Server Communication channel
-    //worker_channel = lsp_worker_create(host_name,123);
-
     // Initialize threads:
     cout <<"Initializing Worker Channel...."<<endl;
-    lsp_worker_create(host_name, port_number); // TCP
-    
-    // send a join request to the server
-    int msg_length = 1;
-    string request_msg = "join";
-    lsp_worker_write(request_msg,msg_length); // TCP
+    // INCOMPLETE: Initialize Worker Client-Server Communication channel
+    worker_channel = lsp_request_create(host_name,port_number);
+
+    //lsp_worker_create(host_name, port_number); // TCP
+    send_join_request();
 
     uint8_t* serv_response;
-    string received_request = lsp_worker_read(serv_response); // TCP
+    int reading;
+
+    string input;
+    string cracked_password;
+    while(true) {
+        int numRead = lsp_request_read(worker_channel,(void*) &input);
+        if(numRead > 0) {
+            //printf("From Server: %s\n",input.c_str());
+            cout<<"!!! Let's Crack This Password !!!"<<endl;
+            cout<<"Password: "<<input<<endl;
+            password_cracker(input);
+            // now that a password has been cracked, restart
+            send_join_request();
+        }
+    }
+    //string received_request = lsp_request_read(serv_response); // TCP
 
     // ***********************************************************
     // Worker thread implementation

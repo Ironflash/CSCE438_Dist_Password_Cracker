@@ -72,12 +72,7 @@ void* readMessage(void* arg)
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
 		printf("Seqnum: %d\n",seqnum);
-		/* check if message is a duplicate or out of order*/
-		if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
-		{
-			// drop the message
-			continue;
-		}
+		
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
@@ -100,6 +95,12 @@ void* readMessage(void* arg)
 		}
 		else // is a normal message
 		{
+			/* check if message is a duplicate or out of order*/
+			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
+			{
+				// drop the message
+				continue;
+			}
 			/* Add message to inbox */
 			a_request->toInbox(new lsp_message(connid,seqnum,payload,num_read));
 			
@@ -290,23 +291,21 @@ void* epochTimer(void* arg)
 
 
 }
+// lsp_request* lsp_request_create_ip(const char* ip, int port);
+// // if called with a host name
+// lsp_request* lsp_request_create(const char* dest, int port)
+// {
+// 	struct hostent* host;
+// 	if((host = (struct hostent*) gethostbyname(dest))<0)
+// 	{
+// 		return NULL;		//server name couldn't be resolved
+// 	}
+// 	return lsp_request_create_ip( host->h_addr_list[0], port);
 
-lsp_request* lsp_request_create_ip(const char* ip, int port);
-
-// if called with a host name
-lsp_request* lsp_request_create(const char* dest, int port)
-{
-	struct hostent* host;
-	if((host = (struct hostent*) gethostbyname(dest))<0)
-	{
-		return NULL;		//server name couldn't be resolved
-	}
-	return lsp_request_create_ip(host->h_addr_list[0], port);
-
-}
+// }
 
 // if called with an ip address
-lsp_request* lsp_request_create_ip(const char* ip, int port)
+lsp_request* lsp_request_create(const char* dest, int port)
 {
 	lsp_request* newRequest = new lsp_request(); 
 	if(newRequest == NULL)
@@ -316,7 +315,12 @@ lsp_request* lsp_request_create_ip(const char* ip, int port)
 		return NULL;		//return NULL if memory could not be allocated
 	}
 	
-	// string ip = "127.0.0.1"; //temp
+	struct hostent* host;
+	if((host = (struct hostent*) gethostbyname(dest))<0)
+	{
+		return NULL;		//server name couldn't be resolved
+	}
+	 string ip = "127.0.0.1"; //temp
 
 	// /* create socket for reading */
 	// newRequest->setReadPort(1333); // this needs to be dynamic
@@ -381,7 +385,8 @@ lsp_request* lsp_request_create_ip(const char* ip, int port)
   	/* create Serv address */
   	struct sockaddr_in tempServ;
   	// tempServ.sin_family = AF_INET;
-  	tempServ.sin_addr.s_addr = inet_addr(ip);
+  	// tempServ.sin_addr.s_addr = inet_addr(host->h_addr); // uncomment for use on multiple machines
+  	tempServ.sin_addr.s_addr = inet_addr(ip.c_str()); // comment for use on multiple machines
   	tempServ.sin_port = htons(port);
   	newRequest->setServAddr(tempServ);
 
@@ -441,15 +446,15 @@ lsp_request* lsp_request_create_ip(const char* ip, int port)
 
 // Request Read. Returns NULL when connection lost
 // Returns number of bytes read
-int lsp_request_read(lsp_request* a_request, uint8_t* pld)
+int lsp_request_read(lsp_request* a_request, void* pld)
 {
 	lsp_message* message = a_request->fromInbox();
 	if(message == NULL)
 	{
 		return -1;
 	}
+	printf("non null message from inbox\n");
 	*((string*)pld) = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
-
 	return message->m_bytesRead;
 }
 
