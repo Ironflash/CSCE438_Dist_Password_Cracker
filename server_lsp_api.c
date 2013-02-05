@@ -40,6 +40,11 @@ void* readReqMessage(void* arg)
 		if((num_read = recvfrom(a_srv->getReadReqSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) tempCli, &sockLen)) < 0)
 		{
+			/* end thread if flagged*/
+			if(a_srv->shouldEndThreads())
+			{
+				break;
+			}
 			perror("Unable to read\n");
 			// return NULL;
 		}
@@ -176,6 +181,11 @@ void* readWorkMessage(void* arg)
 		if((num_read = recvfrom(a_srv->getReadWorkSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) tempCli, &sockLen)) < 0)
 		{
+			/* end thread if flagged*/
+			if(a_srv->shouldEndThreads())
+			{
+				break;
+			}
 			perror("Unable to read\n");
 			// return NULL;
 		}
@@ -287,11 +297,6 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
-		/* end thread if flagged*/
-		if(a_srv->shouldEndThreads())
-		{
-			break;
-		}
 		/* Check for if last message has reveived ACK, if not DO NOT get another message */
 		if(!a_srv->messageAcknowledged())
 		{
@@ -345,6 +350,11 @@ void* writeMessage(void* arg)
 		}
 		// printf("Client Address Port: %d\n",ntohs(cliAddr->sin_port));
 
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		if((sent = sendto(a_srv->getWriteSocket(), buffer, size, 0, (struct sockaddr *)cliAddr, sizeof(*cliAddr))) < 0) //need to get socket of client
 		{
 			perror("Sendto failed");
@@ -649,8 +659,9 @@ vector<uint32_t> lsp_server_workersDisconnects(lsp_server* a_srv)
 }
 
 // Close connection.
-bool lsp_server_close(const lsp_server* a_srv, uint32_t conn_id)
+bool lsp_server_close(lsp_server* a_srv, uint32_t conn_id)
 {
+	a_srv->endThreads();
 	close(a_srv->getReadReqSocket());
 	close(a_srv->getReadWorkSocket());
 	close(a_srv->getWriteSocket());

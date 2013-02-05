@@ -39,11 +39,18 @@ void* readMessage(void* arg)
 		/* end thread if flagged*/
 		if(a_request->shouldEndThreads())
 		{
+			printf("Breaking read\n");
 			break;
 		}
 		if((num_read = recvfrom(a_request->getSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		{
+			// if don't have this then an error will get thown at close
+			if(a_request->shouldEndThreads())
+			{
+				printf("Breaking read\n");
+				break;
+			}
 			perror("Unable to read");
 			// return NULL;
 		}
@@ -179,11 +186,7 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
-		/* end thread if flagged*/
-		if(a_request->shouldEndThreads())
-		{
-			break;
-		}
+		
 		/* Check for if last message has reveived ACK if not DO NOT get another message */
 		if(!a_request->messageAcknowledged())
 		{
@@ -232,6 +235,12 @@ void* writeMessage(void* arg)
 		// tempServ.sin_addr.s_addr = inet_addr(ip.c_str());
 		// tempServ.sin_port = htons(1234);
 
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			printf("Breaking read\n");
+			break;
+		}
 		// if((sent = sendto(a_request->getWriteSocket(), buffer, size, 0, (struct sockaddr *) &servAddr, sizeof(servAddr))) < 0)
 		if((sent = sendto(a_request->getSocket(), buffer, size, 0, (struct sockaddr *) &servAddr, sizeof(servAddr))) < 0) 
 		{
@@ -266,6 +275,7 @@ void* epochTimer(void* arg)
 		/* end thread if flagged*/
 		if(a_request->shouldEndThreads())
 		{
+			printf("Breaking epoch\n");
 			break;
 		}
 		/* only check every so often*/

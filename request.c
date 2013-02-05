@@ -14,6 +14,7 @@ int main()
 		if(numRead > 0)
 		{
 			printf("From Server: %s\n",input.c_str());
+			break;
 		}
 
 	}

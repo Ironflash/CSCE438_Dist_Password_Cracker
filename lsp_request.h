@@ -389,6 +389,13 @@ public:
 	void endThreads()
 	{
 		m_endThreads = true;
+		// void* res;
+		// pthread_join(m_readThread,&res);
+		// printf("one\n");
+		// pthread_join(m_writeThread,&res);
+		// printf("two\n");
+		// pthread_join(m_epochThread,&res);
+		// printf("three\n");
 	}
 
 	bool shouldEndThreads()
