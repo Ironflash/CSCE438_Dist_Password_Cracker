@@ -28,6 +28,7 @@ private:
 	// bool m_isMessageWaiting;
 	bool m_connectionAcknowledged;
 	bool m_dataMessRcvd;
+	bool m_endThreads;				// flag for ending threads
 	uint32_t m_nextSeqnum;
 	uint32_t m_lastServerSeqnum;	// the last sequence number recieved from the server
 	int m_epoch;					// the number of seconds between epochs
@@ -45,6 +46,7 @@ public:
 		m_dropThreshhold = 5; // default is 5 no responses
 		m_messageAcknowledged = true;
 		m_dataMessRcvd = false;
+		m_endThreads = false;
 		m_mostRecentMessage = NULL;
 		// m_isMessageWaiting = false;
 		m_connectionAcknowledged = false;
@@ -382,5 +384,15 @@ public:
 		// //required so that the server will go on and not wait for a reply
 		// m_messageAcknowledged = true;
 		//do something
+	}
+
+	void endThreads()
+	{
+		m_endThreads = true;
+	}
+
+	bool shouldEndThreads()
+	{
+		return m_endThreads;
 	}
 };

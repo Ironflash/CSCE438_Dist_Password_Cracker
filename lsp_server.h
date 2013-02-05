@@ -58,6 +58,7 @@ private:
 	lsp_message* m_messageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_mostRecentMessage;
 	bool m_messageAcknowledged;		// has last message been acknowledged
+	bool m_endThreads;
 	// bool m_isMessageWaiting;		// keeps track if there is a server message that is awaiting approval
 	int m_epoch;					// the number of seconds between epochs
 	int m_dropThreshhold;			// number of no repsonses before the connection is dropped
@@ -70,6 +71,7 @@ public:
 		m_nextReqId = 1;	//Request ids will be odd
 		m_nextWorkId = 2;	//Worker ids will be even
 		m_messageAcknowledged = true;
+		m_endThreads = false;
 		// m_isMessageWaiting = false;
 		m_mostRecentMessage = NULL;
 		m_epoch = 2;		// epoch defaults to intervals of 2 seconds
@@ -506,9 +508,12 @@ public:
 			//put id up for re-assignment
 			m_workDis.push(connid);
 			//remove from list of current workers
-			std::vector<uint32_t>::iterator it;
-			it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
-			m_workerIds.erase(it);
+			if(m_workerIds.count(connid) > 0)
+			{
+				std::vector<uint32_t>::iterator it;
+				it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
+				m_workerIds.erase(it);
+			}
 		}
 		else	// the connection id is for a request
 		{
@@ -518,9 +523,12 @@ public:
 			//put id up for re-assignment
 			m_reqDis.push(connid);
 			//remove from list of current workers
-			std::vector<uint32_t>::iterator it;
-			it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
-			m_requestIds.erase(it);
+			if(m_requestIds.count(connid) > 0)
+			{
+				std::vector<uint32_t>::iterator it;
+				it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
+				m_requestIds.erase(it);
+			}
 		}
 		
 		//required so that the server will go on and not wait for a reply
@@ -577,6 +585,16 @@ public:
 		return m_cliAddresses[connid].numNoKeepAlive >  m_KAThreshhold;
 	}
 
+	void endThreads()
+	{
+		m_endThreads = true;
+	}
+
+	bool shouldEndThreads()
+	{
+		return m_endThreads;
+	}
+
 	/* awaiting message functions */
 	void awaitingMessage(uint32_t connid)
 	{
@@ -585,9 +603,12 @@ public:
 
 	void removeAwaitingMessage(uint32_t connid)
 	{
-		std::vector<uint32_t>::iterator it;
-		it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
-		m_awaitingMessages.erase(it);
+		if(m_awaitingMessages.count(connid) > 0)
+		{
+			std::vector<uint32_t>::iterator it;
+			it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
+			m_awaitingMessages.erase(it);
+		}
 	}
 
 	std::vector<uint32_t> getAwaitingMessages() const

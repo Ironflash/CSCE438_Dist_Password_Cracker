@@ -30,6 +30,11 @@ void* readReqMessage(void* arg)
 	//keep reading for messages
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
 		//get packet from socket
 		if((num_read = recvfrom(a_srv->getReadReqSocket(), buffer , MAX_BUFFER, 0,	
@@ -161,6 +166,11 @@ void* readWorkMessage(void* arg)
 	//keep reading for messages
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
 		//get packet from socket
 		if((num_read = recvfrom(a_srv->getReadWorkSocket(), buffer , MAX_BUFFER, 0,	
@@ -277,6 +287,11 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		/* Check for if last message has reveived ACK, if not DO NOT get another message */
 		if(!a_srv->messageAcknowledged())
 		{
@@ -360,6 +375,11 @@ void* epochTimer(void* arg)
 	lsp_server* a_srv = (lsp_server*) arg;
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		/* only check every so often*/
 		sleep(a_srv->getEpoch());
 		printf("epoch has started\n");

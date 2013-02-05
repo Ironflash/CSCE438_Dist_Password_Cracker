@@ -36,6 +36,11 @@ void* readMessage(void* arg)
 		// if((num_read = recvfrom(a_request->getReadSocket(), buffer , MAX_BUFFER, 0,	
 	 //                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		// {
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			break;
+		}
 		if((num_read = recvfrom(a_request->getSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		{
@@ -170,9 +175,15 @@ void* writeMessage(void* arg)
 {
 	lsp_request* a_request = (lsp_request*) arg;
 
+
 	/* continually try to send messages */
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			break;
+		}
 		/* Check for if last message has reveived ACK if not DO NOT get another message */
 		if(!a_request->messageAcknowledged())
 		{
@@ -249,8 +260,14 @@ void* writeMessage(void* arg)
 void* epochTimer(void* arg)
 {
 	lsp_request* a_request = (lsp_request*) arg;
+
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			break;
+		}
 		/* only check every so often*/
 		sleep(a_request->getEpoch());
 		
@@ -385,8 +402,8 @@ lsp_request* lsp_request_create(const char* dest, int port)
   	/* create Serv address */
   	struct sockaddr_in tempServ;
   	// tempServ.sin_family = AF_INET;
-  	tempServ.sin_addr.s_addr = inet_addr(host->h_addr); // uncomment for use on multiple machines
-  	// tempServ.sin_addr.s_addr = inet_addr(ip.c_str()); // comment for use on multiple machines
+  	// tempServ.sin_addr.s_addr = inet_addr(host->h_addr); // uncomment for use on multiple machines
+  	tempServ.sin_addr.s_addr = inet_addr(ip.c_str()); // comment for use on multiple machines
   	tempServ.sin_port = htons(port);
   	newRequest->setServAddr(tempServ);
 
@@ -486,6 +503,7 @@ bool lsp_request_close(lsp_request* a_request)
 	//go through and free all lsp_message
 	// close(a_request->getReadSocket());
 	// close(a_request->getWriteSocket());
+	a_request->endThreads();
 	close(a_request->getSocket());
 	delete a_request;
 	return true;
