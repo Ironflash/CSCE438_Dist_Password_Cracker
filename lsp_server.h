@@ -508,7 +508,7 @@ public:
 			//put id up for re-assignment
 			m_workDis.push(connid);
 			//remove from list of current workers
-			if(m_workerIds.count(connid) > 0)
+			if(std::count(m_workerIds.begin(), m_workerIds.end(),connid) > 0)
 			{
 				std::vector<uint32_t>::iterator it;
 				it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
@@ -523,7 +523,7 @@ public:
 			//put id up for re-assignment
 			m_reqDis.push(connid);
 			//remove from list of current workers
-			if(m_requestIds.count(connid) > 0)
+			if(std::count(m_requestIds.begin(), m_requestIds.end(),connid) > 0)
 			{
 				std::vector<uint32_t>::iterator it;
 				it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
@@ -603,7 +603,7 @@ public:
 
 	void removeAwaitingMessage(uint32_t connid)
 	{
-		if(m_awaitingMessages.count(connid) > 0)
+		if(std::count(m_awaitingMessages.begin(), m_awaitingMessages.end(),connid) > 0)
 		{
 			std::vector<uint32_t>::iterator it;
 			it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
