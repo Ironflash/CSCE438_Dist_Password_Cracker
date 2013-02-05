@@ -30,6 +30,11 @@ void* readReqMessage(void* arg)
 	//keep reading for messages
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
 		//get packet from socket
 		if((num_read = recvfrom(a_srv->getReadReqSocket(), buffer , MAX_BUFFER, 0,	
@@ -161,6 +166,11 @@ void* readWorkMessage(void* arg)
 	//keep reading for messages
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
 		//get packet from socket
 		if((num_read = recvfrom(a_srv->getReadWorkSocket(), buffer , MAX_BUFFER, 0,	
@@ -277,6 +287,11 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		/* Check for if last message has reveived ACK, if not DO NOT get another message */
 		if(!a_srv->messageAcknowledged())
 		{
@@ -360,6 +375,11 @@ void* epochTimer(void* arg)
 	lsp_server* a_srv = (lsp_server*) arg;
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		/* only check every so often*/
 		sleep(a_srv->getEpoch());
 		printf("epoch has started\n");
@@ -580,14 +600,14 @@ lsp_server* lsp_server_create(int port)
 // Returns number of bytes read. conn_id is an output parameter
 int lsp_server_read(lsp_server* a_srv, void* pld, uint32_t* conn_id)
 {
-	//cout<<"Starting lsp_server_read"<<endl;
-	lsp_message* message = a_srv->fromInbox(); // seg faults here
-	//cout<<"Doesn't get here"<<endl;
-	if(message == NULL) {
+	lsp_message* message = a_srv->fromInbox();
+	if(message == NULL)
+	{
 		return -1;
 	}
 	*((string*)pld) = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 	*conn_id = message->m_connid;
+
 	return message->m_bytesRead;
 }
 

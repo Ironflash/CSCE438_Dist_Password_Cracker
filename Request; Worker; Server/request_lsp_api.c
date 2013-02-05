@@ -36,6 +36,11 @@ void* readMessage(void* arg)
 		// if((num_read = recvfrom(a_request->getReadSocket(), buffer , MAX_BUFFER, 0,	
 	 //                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		// {
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			break;
+		}
 		if((num_read = recvfrom(a_request->getSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		{
@@ -170,9 +175,15 @@ void* writeMessage(void* arg)
 {
 	lsp_request* a_request = (lsp_request*) arg;
 
+
 	/* continually try to send messages */
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			break;
+		}
 		/* Check for if last message has reveived ACK if not DO NOT get another message */
 		if(!a_request->messageAcknowledged())
 		{
@@ -207,8 +218,8 @@ void* writeMessage(void* arg)
 		// end of marshalling
 
 		printf("Attempting to send message\n");
-		printf("Size of pld: %d\n", sizeof(pld));
-		printf("size of msg: %d\n", sizeof(*msg));
+		printf("Size of pld: %d\n", (int)sizeof(pld));
+		printf("size of msg: %d\n", (int)sizeof(*msg));
 
 		// printf("Socket: %d\n",a_request->getSocket());
 
@@ -249,8 +260,14 @@ void* writeMessage(void* arg)
 void* epochTimer(void* arg)
 {
 	lsp_request* a_request = (lsp_request*) arg;
+
 	while(true)
 	{
+		/* end thread if flagged*/
+		if(a_request->shouldEndThreads())
+		{
+			break;
+		}
 		/* only check every so often*/
 		sleep(a_request->getEpoch());
 		
@@ -486,6 +503,7 @@ bool lsp_request_close(lsp_request* a_request)
 	//go through and free all lsp_message
 	// close(a_request->getReadSocket());
 	// close(a_request->getWriteSocket());
+	a_request->endThreads();
 	close(a_request->getSocket());
 	delete a_request;
 	return true;

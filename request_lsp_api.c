@@ -218,8 +218,8 @@ void* writeMessage(void* arg)
 		// end of marshalling
 
 		printf("Attempting to send message\n");
-		printf("Size of pld: %d\n", sizeof(pld));
-		printf("size of msg: %d\n", sizeof(*msg));
+		printf("Size of pld: %d\n", (int)sizeof(pld));
+		printf("size of msg: %d\n", (int)sizeof(*msg));
 
 		// printf("Socket: %d\n",a_request->getSocket());
 

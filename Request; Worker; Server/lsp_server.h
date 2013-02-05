@@ -3,11 +3,6 @@
 #include <vector>
 #include <pthread.h>
 
-#include "semaphore.h"
-
-static Semaphore m_inboxLock (1);
-static Semaphore m_outboxLock (1);
-
 /* Used to group together addr and socket of clients */
 struct clientConnection
 {
@@ -63,6 +58,7 @@ private:
 	lsp_message* m_messageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_mostRecentMessage;
 	bool m_messageAcknowledged;		// has last message been acknowledged
+	bool m_endThreads;
 	// bool m_isMessageWaiting;		// keeps track if there is a server message that is awaiting approval
 	int m_epoch;					// the number of seconds between epochs
 	int m_dropThreshhold;			// number of no repsonses before the connection is dropped
@@ -75,6 +71,7 @@ public:
 		m_nextReqId = 1;	//Request ids will be odd
 		m_nextWorkId = 2;	//Worker ids will be even
 		m_messageAcknowledged = true;
+		m_endThreads = false;
 		// m_isMessageWaiting = false;
 		m_mostRecentMessage = NULL;
 		m_epoch = 2;		// epoch defaults to intervals of 2 seconds
@@ -159,9 +156,7 @@ public:
 	{
 		// printf("Attempting to add to inbox\n");
 		// pthread_mutex_lock(&m_inboxLock);
-		m_inboxLock.P();
 		m_inbox.push(message);
-		m_inboxLock.V();
 		// pthread_mutex_unlock(&m_inboxLock);
 		// printf("Added to inbox\n");
 	}
@@ -169,9 +164,7 @@ public:
 	void toOutbox(lsp_message* message)
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-		m_outboxLock.P();
 		m_outbox.push(message);
-		m_outboxLock.V();
 		// pthread_mutex_unlock(&m_outboxLock);
 	}
 
@@ -248,7 +241,7 @@ public:
 
 	sockaddr_in* getCliAddr(uint32_t connid) 
 	{
-		printf("num cli: %d\n",m_cliAddresses.size());
+		printf("num cli: %d\n",(int)m_cliAddresses.size());
 		if(m_cliAddresses.empty())
 		{
 			printf("cliAddresses empty\n");
@@ -259,7 +252,7 @@ public:
 			printf("cliAddresses not empty\n");
 		}
 		// client no longer exists
-		printf("num of clients with address %d: %d",connid,m_cliAddresses.count(connid));
+		printf("num of clients with address %d: %d",connid,(int)m_cliAddresses.count(connid));
 		if(m_cliAddresses.count(connid) == 0)
 		{
 			return NULL;
@@ -345,32 +338,26 @@ public:
 	lsp_message* fromInbox()
 	{
 		// pthread_mutex_lock(&m_inboxLock);
-		m_inboxLock.P();
 		if(m_inbox.empty())
 		{
-			m_inboxLock.V();
 			return NULL;
 		}
 		lsp_message* result = m_inbox.front();
 		m_inbox.pop();
 		// pthread_mutex_unlock(&m_inboxLock);
-		m_inboxLock.V();
 		return result;
 	}
 
 	lsp_message* fromOutbox()
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-		m_outboxLock.P();
 		if(m_outbox.empty())
 		{
-			m_outboxLock.V();
 			return NULL;
 		}
 		lsp_message* result = m_outbox.front();
 		m_outbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
-		m_outboxLock.V();
 		return result;
 	}
 
@@ -521,9 +508,12 @@ public:
 			//put id up for re-assignment
 			m_workDis.push(connid);
 			//remove from list of current workers
-			std::vector<uint32_t>::iterator it;
-			it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
-			m_workerIds.erase(it);
+			if(std::count(m_workerIds.begin(), m_workerIds.end(),connid) > 0)
+			{
+				std::vector<uint32_t>::iterator it;
+				it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
+				m_workerIds.erase(it);
+			}
 		}
 		else	// the connection id is for a request
 		{
@@ -533,9 +523,12 @@ public:
 			//put id up for re-assignment
 			m_reqDis.push(connid);
 			//remove from list of current workers
-			std::vector<uint32_t>::iterator it;
-			it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
-			m_requestIds.erase(it);
+			if(std::count(m_requestIds.begin(), m_requestIds.end(),connid) > 0)
+			{
+				std::vector<uint32_t>::iterator it;
+				it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
+				m_requestIds.erase(it);
+			}
 		}
 		
 		//required so that the server will go on and not wait for a reply
@@ -592,6 +585,16 @@ public:
 		return m_cliAddresses[connid].numNoKeepAlive >  m_KAThreshhold;
 	}
 
+	void endThreads()
+	{
+		m_endThreads = true;
+	}
+
+	bool shouldEndThreads()
+	{
+		return m_endThreads;
+	}
+
 	/* awaiting message functions */
 	void awaitingMessage(uint32_t connid)
 	{
@@ -600,9 +603,12 @@ public:
 
 	void removeAwaitingMessage(uint32_t connid)
 	{
-		std::vector<uint32_t>::iterator it;
-		it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
-		m_awaitingMessages.erase(it);
+		if(std::count(m_awaitingMessages.begin(), m_awaitingMessages.end(),connid) > 0)
+		{
+			std::vector<uint32_t>::iterator it;
+			it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
+			m_awaitingMessages.erase(it);
+		}
 	}
 
 	std::vector<uint32_t> getAwaitingMessages() const

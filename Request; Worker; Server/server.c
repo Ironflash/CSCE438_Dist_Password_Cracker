@@ -163,7 +163,7 @@ void handle_process_loop(int * _fd) {
 
 void process_request_udp(uint32_t client_id, string * message){
 	//From requester or worker?
-	cout<<"******Requester OR Worker?******"<<endl;
+	//cout<<"******Requester OR Worker?******"<<endl;
 	if ((*message).length() == 40) { // From requester
 		cout<<"******REQUESTER******"<<endl;
 		requesters.push(client_id);
@@ -178,7 +178,17 @@ void process_request_udp(uint32_t client_id, string * message){
 		workers.push(client_id);
 		cout<<"pushing worker (address): "<<client_id<<endl;
 		number_available_workers = workers.size();
+	} else if ((*message).compare(0, 6, "Found:") == 0) {
+		cout<<"******WORKER******"<<endl;
+		cout<<"return password to requester"<<endl;
+		uint32_t requester_id = requesters.front();
+		cout<<"requester fd to pop = "<<requester_id<<endl;
+		//socket_write(request, _fd);
+		requesters.pop();
+		lsp_server_write(server_channel,*message,0,requester_id);
+		cout<<"******Finished sending to requester******"<<endl;
 	} else {
+
 	}
 }
 

@@ -30,9 +30,10 @@ worker: worker.c
 	g++ -g worker.c lspMessage.pb.cc -o worker -lprotobuf -lpthread
 # 	g++ -g -o worker worker.c
 
-server: server.c semaphore.o
-#server: server.c
-	g++ -g server.c semaphore.o lspMessage.pb.cc -o server -lprotobuf -lpthread
+#server: server.c semaphore.o
+#	g++ -g server.c semaphore.o lspMessage.pb.cc -o server -lprotobuf -lpthread
+server: server.c
+	g++ -g server.c lspMessage.pb.cc -o server -lprotobuf -lpthread
 
 hw2:
 	clear

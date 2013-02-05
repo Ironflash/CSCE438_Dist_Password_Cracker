@@ -111,19 +111,21 @@ int main(int argc, char **argv) {
     //cout<<"!!! Password cracked !!!"<<endl;
     //cout<<"Password: "<<input.c_str()<<endl;
     string input;
-    while(true) {
+    bool cracked = false;
+    while(!cracked) {
         int numRead = lsp_request_read(request_channel,(void*) &input);
         if(numRead > 0) {
             //printf("From Server: %s\n",input.c_str());
-            cout<<"!!! Password cracked !!!"<<endl;
-            cout<<"Password: "<<input.c_str()<<endl;
-            break;
+            cout<<"!!!!!! Password cracked !!!!!!"<<endl;
+            cout<<input<<endl;
+            cracked = true;
+            //break;
         }
-
     }
 
 	// ***********************************************************
     // Close the request client when done
+    cout<<"Closing Request Channel..."<<endl;
     lsp_request_close(request_channel); // UDP-LSP
     //lsp_request_close(); // TCP
     cout<<"Request client main completed successfully"<<endl;

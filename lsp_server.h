@@ -241,7 +241,7 @@ public:
 
 	sockaddr_in* getCliAddr(uint32_t connid) 
 	{
-		printf("num cli: %d\n",m_cliAddresses.size());
+		printf("num cli: %d\n",(int)m_cliAddresses.size());
 		if(m_cliAddresses.empty())
 		{
 			printf("cliAddresses empty\n");
@@ -252,7 +252,7 @@ public:
 			printf("cliAddresses not empty\n");
 		}
 		// client no longer exists
-		printf("num of clients with address %d: %d",connid,m_cliAddresses.count(connid));
+		printf("num of clients with address %d: %d",connid,(int)m_cliAddresses.count(connid));
 		if(m_cliAddresses.count(connid) == 0)
 		{
 			return NULL;
