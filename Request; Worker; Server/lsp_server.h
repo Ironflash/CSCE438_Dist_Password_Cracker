@@ -3,6 +3,11 @@
 #include <vector>
 #include <pthread.h>
 
+#include "semaphore.h"
+
+static Semaphore m_inboxLock (1);
+static Semaphore m_outboxLock (1);
+
 /* Used to group together addr and socket of clients */
 struct clientConnection
 {
@@ -154,7 +159,9 @@ public:
 	{
 		// printf("Attempting to add to inbox\n");
 		// pthread_mutex_lock(&m_inboxLock);
+		m_inboxLock.P();
 		m_inbox.push(message);
+		m_inboxLock.V();
 		// pthread_mutex_unlock(&m_inboxLock);
 		// printf("Added to inbox\n");
 	}
@@ -162,7 +169,9 @@ public:
 	void toOutbox(lsp_message* message)
 	{
 		// pthread_mutex_lock(&m_outboxLock);
+		m_outboxLock.P();
 		m_outbox.push(message);
+		m_outboxLock.V();
 		// pthread_mutex_unlock(&m_outboxLock);
 	}
 
@@ -336,26 +345,32 @@ public:
 	lsp_message* fromInbox()
 	{
 		// pthread_mutex_lock(&m_inboxLock);
+		m_inboxLock.P();
 		if(m_inbox.empty())
 		{
+			m_inboxLock.V();
 			return NULL;
 		}
 		lsp_message* result = m_inbox.front();
 		m_inbox.pop();
 		// pthread_mutex_unlock(&m_inboxLock);
+		m_inboxLock.V();
 		return result;
 	}
 
 	lsp_message* fromOutbox()
 	{
 		// pthread_mutex_lock(&m_outboxLock);
+		m_outboxLock.P();
 		if(m_outbox.empty())
 		{
+			m_outboxLock.V();
 			return NULL;
 		}
 		lsp_message* result = m_outbox.front();
 		m_outbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
+		m_outboxLock.V();
 		return result;
 	}
 

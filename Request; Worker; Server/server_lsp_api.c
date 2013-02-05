@@ -580,14 +580,14 @@ lsp_server* lsp_server_create(int port)
 // Returns number of bytes read. conn_id is an output parameter
 int lsp_server_read(lsp_server* a_srv, void* pld, uint32_t* conn_id)
 {
-	lsp_message* message = a_srv->fromInbox();
-	if(message == NULL)
-	{
+	//cout<<"Starting lsp_server_read"<<endl;
+	lsp_message* message = a_srv->fromInbox(); // seg faults here
+	//cout<<"Doesn't get here"<<endl;
+	if(message == NULL) {
 		return -1;
 	}
 	*((string*)pld) = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 	*conn_id = message->m_connid;
-
 	return message->m_bytesRead;
 }
 

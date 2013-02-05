@@ -6,8 +6,8 @@ hw2_client: request worker
 
 hw2_server: server
 
-semaphore.o: semaphore.H semaphore.C
-	g++ -c -g semaphore.C
+semaphore.o: semaphore.h semaphore.c
+	g++ -c -g semaphore.c
 
 netreqchannel.o: netreqchannel.h netreqchannel.c
 	g++ -c -g netreqchannel.c
@@ -30,9 +30,9 @@ worker: worker.c
 	g++ -g worker.c lspMessage.pb.cc -o worker -lprotobuf -lpthread
 # 	g++ -g -o worker worker.c
 
-#server: server.c semaphore.o
-server: server.c
-	g++ -g server.c lspMessage.pb.cc -o server -lprotobuf -lpthread
+server: server.c semaphore.o
+#server: server.c
+	g++ -g server.c semaphore.o lspMessage.pb.cc -o server -lprotobuf -lpthread
 
 hw2:
 	clear
