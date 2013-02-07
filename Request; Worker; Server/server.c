@@ -19,9 +19,15 @@
 #include <pthread.h>
 #include <queue>
 #include <errno.h>
-//#include "netreqchannel.h"
 
 using namespace std;
+
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 /*--------------------------------------------------------------------------*/
 /* CONSTANTS/VARIABLES */
@@ -31,11 +37,19 @@ using namespace std;
 struct lsp_server* server_channel;
 
 const int MAX_MESSAGE = 255;
-//queue<int*> requesters;
-//queue<int*> workers;
 queue<uint32_t> requesters;
 queue<uint32_t> workers;
+static int total_received_requests = 0;
+static int requests_being_processed = 0;
 static int number_available_workers = 0;
+static int workers_processing_requests = 0;
+
+/*--------------------------------------------------------------------------*/
+/* FORWARDS */
+/*--------------------------------------------------------------------------*/
+
+//void handle_process_loop(int * _fd);
+void print_server_status();
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS -- TCP Socket Read/Write */
@@ -74,38 +88,6 @@ int socket_write(string _msg, int * _fd) {
   }
 }
 
-/*--------------------------------------------------------------------------*/
-/* FORWARDS */
-/*--------------------------------------------------------------------------*/
-
-//void handle_process_loop(int * _fd);
-
-/*--------------------------------------------------------------------------*/
-/* LOCAL FUNCTIONS */
-/*--------------------------------------------------------------------------*/
-
-void * get_available_worker(void * args) {
-//void get_available_worker(string request) {
-	string * request = (string *) args;
-
-	cout<<"Give this to the next available worker: "<<*request<<endl;
-	for (;;) {
-		if (number_available_workers > 0) {
-			cout<<"****Giving request ("<<*request<<") to worker # "<<workers.front()<<endl;
-			cout<<"workers size = "<<number_available_workers;
-			uint32_t worker_id = workers.front();
-			cout<<"worker fd to pop = "<<worker_id<<endl;
-			//socket_write(request, _fd);
-			workers.pop();
-			number_available_workers = workers.size();
-			cout<<"workers size = "<<number_available_workers;
-
-			lsp_server_write(server_channel,*request,0,worker_id);
-			break;
-		}
-	}
-	pthread_exit(NULL);
-}
 /*
 void * handle_data_requests(void * args) {
   //nthreads++;
@@ -161,35 +143,102 @@ void handle_process_loop(int * _fd) {
 }
 //*/
 
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS */
+/*--------------------------------------------------------------------------*/
+
+void * get_available_worker(void * args) {
+//void get_available_worker(string request) {
+	string * request = (string *) args;
+
+	DEBUG_MSG("Give this to the next available worker: "<<*request);
+	for (;;) {
+		if (number_available_workers > 0) {
+			DEBUG_MSG("****Giving request ("<<*request<<") to worker # "<<workers.front());
+			uint32_t worker_id = workers.front();
+			DEBUG_MSG("worker fd to pop = "<<worker_id);
+			workers.pop();
+			print_server_status();
+			number_available_workers = workers.size();
+
+			lsp_server_write(server_channel,*request,0,worker_id);
+			break;
+		}
+	}
+	pthread_exit(NULL);
+}
+
 void process_request_udp(uint32_t client_id, string * message){
 	//From requester or worker?
-	//cout<<"******Requester OR Worker?******"<<endl;
 	if ((*message).length() == 40) { // From requester
-		cout<<"******REQUESTER******"<<endl;
+		DEBUG_MSG("******REQUESTER******");
 		requesters.push(client_id);
-		cout<<"Send request to worker"<<endl;
+		print_server_status();
+		DEBUG_MSG("Send request to worker");
 		pthread_t thread_id;
-  		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
-		//get_available_worker(message);
-		//string returnString = input + " back at you!";
-		//lsp_server_write(server_channel,returnString,0,fake_id);
+  		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);  		
 	} else if ((*message) == "join") {
-		cout<<"******WORKER******"<<endl;
+		DEBUG_MSG("******WORKER******");
 		workers.push(client_id);
-		cout<<"pushing worker (address): "<<client_id<<endl;
+		print_server_status();
+		DEBUG_MSG("pushing worker (address): "<<client_id);
 		number_available_workers = workers.size();
 	} else if ((*message).compare(0, 6, "Found:") == 0) {
-		cout<<"******WORKER******"<<endl;
-		cout<<"return password to requester"<<endl;
+		DEBUG_MSG("******WORKER******");
+		DEBUG_MSG("return password to requester");
 		uint32_t requester_id = requesters.front();
-		cout<<"requester fd to pop = "<<requester_id<<endl;
+		DEBUG_MSG("requester fd to pop = "<<requester_id);
 		//socket_write(request, _fd);
 		requesters.pop();
+		print_server_status();
 		lsp_server_write(server_channel,*message,0,requester_id);
-		cout<<"******Finished sending to requester******"<<endl;
+		DEBUG_MSG("******Finished sending to requester******");
 	} else {
 
 	}
+}
+
+void print_server_status(){
+	int line_width = 30;
+	cout<<"Total Requests Received"<<endl;
+	cout<<"[";
+	for (int i=0; i<total_received_requests; i++) {
+		cout<<":";
+	}
+	for (int i=0; i<(line_width-total_received_requests); i++) {
+		cout<<" ";
+	}
+	cout<<"]"<<endl;;
+
+	cout<<"Requests Being Processed"<<endl;
+	cout<<"[";
+	for (int i=0; i<requests_being_processed; i++) {
+		cout<<":";
+	}
+	for (int i=0; i<(line_width-requests_being_processed); i++) {
+		cout<<" ";
+	}
+	cout<<"]"<<endl;;
+	
+	cout<<"Available Workers"<<endl;
+	cout<<"[";
+	for (int i=0; i<number_available_workers; i++) {
+		cout<<":";
+	}
+	for (int i=0; i<(line_width-number_available_workers); i++) {
+		cout<<" ";
+	}
+	cout<<"]"<<endl;;
+
+	cout<<"Workers Processing Requests"<<endl;
+	cout<<"[";
+	for (int i=0; i<workers_processing_requests; i++) {
+		cout<<":";
+	}
+	for (int i=0; i<(line_width-workers_processing_requests); i++) {
+		cout<<" ";
+	}
+	cout<<"]"<<endl;;
 }
 
 
@@ -233,24 +282,20 @@ int main(int argc, char **argv) {
 
 	// Initialize Server Communication Channel
     cout<<"Establishing UDP-LSP Server Socket..."<<endl;
-
-    // ***********************************************************
-    // Implement LSP eventually
     server_channel = lsp_server_create(port_number); // UDP-LSP
-    //NetworkRequestChannel* server_channel;
-    //server_channel = lsp_server_create(port_number, handle_data_requests);
 
     string input;
     uint32_t fake_id = 0;
-    uint32_t send_response_to;
-	//int num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
+    //uint32_t send_response_to;
 	int num_read;
-	int answer_length = 4;
+	//int answer_length = 4;
+	print_server_status();
 	while(true) {
 		//cout<<"!!!!!!!!!!!!! Attempting to read !!!!!!!!!!!!!"<<endl;
 		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
 		if(num_read > 0) {
-			cout<<"*********Received a Request*********"<<endl;
+			DEBUG_MSG("*********Received a Request*********");
+			total_received_requests++;
 			string * process = new string;
 			*process = input;
 			process_request_udp(fake_id, process);
@@ -267,9 +312,7 @@ int main(int argc, char **argv) {
 	// int num_read = lsp_server_read(serv,(void*) &input, &fake_id);
 	int num_read;
 	//*/
-	// ***********************************************************
-
-	// Initialize Server Loop
+	
 	//handle_process_loop();
 
 	// ***********************************************************
@@ -277,7 +320,6 @@ int main(int argc, char **argv) {
 	// Close the server when done
 	// lsp_server_close(server_channel,1); // UDP-LSP 1 is just for testing needs to change
 	
-	// lsp_server_close(server_channel,1); // TCP
 	cout<<"Server main completed successfully"<<endl;
 	usleep(1000000);
 	// ***********************************************************

@@ -17,9 +17,6 @@
 #include <iostream>
 #include "worker_lsp_api.c"
 
-// netreqchannel.h for temporary read/write to inbox/outbox
-//#include "netreqchannel.h"
-
 using namespace std;
 
 /*--------------------------------------------------------------------------*/
@@ -30,7 +27,6 @@ static int number_of_worker_threads;
 static pthread_t e_thread;
 static pthread_t *w_threads;
 
-// INCOMPLETE: these will be called when LSP is complete
 // Create Request Client-Server Communication channel
 static struct lsp_request* worker_channel;
 
@@ -54,7 +50,6 @@ void send_join_request(){
     // send a join request to the server
     int msg_length = 4;
     string request_msg = "join";
-    //lsp_request_write(request_msg,msg_length); // TCP
     lsp_request_write(worker_channel,request_msg,msg_length); //UDP-LSP
 }
 
@@ -230,10 +225,11 @@ void wait_for_all_threads() {
 
 int main(int argc, char **argv) {
     // Initialization
-    number_of_worker_threads = 2;
 
     const char * host_name = "localhost";
     unsigned short port_number = 1235;
+
+    number_of_worker_threads = 2;
 
     // ***********************************************************
     // getopt code
@@ -283,29 +279,27 @@ int main(int argc, char **argv) {
 
     // Initialize threads:
     cout <<"Initializing Worker Channel...."<<endl;
-    // INCOMPLETE: Initialize Worker Client-Server Communication channel
     worker_channel = lsp_request_create(host_name,port_number);
 
-    //lsp_worker_create(host_name, port_number); // TCP
     send_join_request();
 
-    uint8_t* serv_response;
-    int reading;
-
+    // ***********************************************************
+    // Initialize Worker Loop
     string input;
-    string cracked_password;
     while(true) {
         int numRead = lsp_request_read(worker_channel,(void*) &input);
         if(numRead > 0) {
-            //printf("From Server: %s\n",input.c_str());
             cout<<"!!! Let's Crack This Password !!!"<<endl;
             cout<<"Password: "<<input<<endl;
             password_cracker(input);
             // now that a password has been cracked, restart
+
+            // TODO worker will close when the server closes it:
+            // Write a function to handle a server closing the worker msg
             send_join_request();
         }
     }
-    //string received_request = lsp_request_read(serv_response); // TCP
+    // ***********************************************************
 
     // ***********************************************************
     // Worker thread implementation

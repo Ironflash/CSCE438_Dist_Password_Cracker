@@ -14,6 +14,12 @@
 
 using namespace std;
 
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 /* Reads a request message from network */
 void* readReqMessage(void* arg) 
@@ -22,7 +28,8 @@ void* readReqMessage(void* arg)
 	const int MAX_BUFFER = 1000;
 	void* buffer = malloc(MAX_BUFFER);
 
-	printf("Waiting\n");
+	//printf("Waiting\n");
+	DEBUG_MSG("Waiting");
 
 	
 	socklen_t sockLen = sizeof(sockaddr_in);
@@ -40,12 +47,18 @@ void* readReqMessage(void* arg)
 		if((num_read = recvfrom(a_srv->getReadReqSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) tempCli, &sockLen)) < 0)
 		{
+			/* end thread if flagged*/
+			if(a_srv->shouldEndThreads())
+			{
+				break;
+			}
 			perror("Unable to read\n");
 			// return NULL;
 		}
 		else
 		{
-			printf("Read: %d Bytes\n",num_read);
+			//printf("Read: %d Bytes\n",num_read);
+			DEBUG_MSG("Read: "<<num_read);
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
 		// Code to unmarshall a lsp_message ... still in progress 
@@ -64,19 +77,23 @@ void* readReqMessage(void* arg)
 	    //get payload from lsp_message
 	    string payload =  msg.payload();
 	    // *((string*)pld) = payload;		//convert the void* to a string pointer and set data to that of the string
-	    printf("payload: %s\n",payload.c_str());
+	    //printf("payload: %s\n",payload.c_str());
+	    DEBUG_MSG("payload: "<<payload.c_str());
 		//get connection id from the packet
 		uint32_t connid = msg.connid();
 		// conn_id = &connid;
-		printf("Conn-id: %d\n",connid);
+		//printf("Conn-id: %d\n",connid);
+		DEBUG_MSG("Conn-id: "<<connid);
 
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
-		printf("Seqnum: %d\n",seqnum);
+		//printf("Seqnum: %d\n",seqnum);
+		DEBUG_MSG("Seqnum: "<<seqnum);
 		// check for keep alive, must be checked before checking for out of order
 		if(connid != 0 && seqnum == 0) // client is still alive message
 		{
-			printf("received keep alive\n");
+			//printf("received keep alive\n");
+			DEBUG_MSG("received kep alive");
 			a_srv->receivedKeepAlive(connid);
 		}
 		
@@ -146,7 +163,8 @@ void* readReqMessage(void* arg)
 		// printf("Sending request message to outbox with id: %d\n",connid);
 		a_srv->toOutbox(new lsp_message(connid,seqnum,""));	
 		
-		printf("END OF READ\n");
+		//printf("END OF READ\n");
+		DEBUG_MSG("END OF READ");
 	}
 }
 
@@ -157,7 +175,8 @@ void* readWorkMessage(void* arg)
 	const int MAX_BUFFER = 1000;
 	void* buffer = malloc(MAX_BUFFER);
 
-	printf("Waiting\n");
+	//printf("Waiting\n");
+	DEBUG_MSG("Waiting");
 
 	
 	
@@ -176,12 +195,18 @@ void* readWorkMessage(void* arg)
 		if((num_read = recvfrom(a_srv->getReadWorkSocket(), buffer , MAX_BUFFER, 0,	
 	                 (struct sockaddr *) tempCli, &sockLen)) < 0)
 		{
+			/* end thread if flagged*/
+			if(a_srv->shouldEndThreads())
+			{
+				break;
+			}
 			perror("Unable to read\n");
 			// return NULL;
 		}
 		else
 		{
-			printf("Read: %d Bytes\n",num_read);
+			//printf("Read: %d Bytes\n",num_read);
+			DEBUG_MSG("Read: "<<num_read);
 		}
 		// Code to unmarshall a lsp_message ... still in progress 
 		GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -198,18 +223,22 @@ void* readWorkMessage(void* arg)
 	    //consruct message
 	    //get payload from lsp_message
 	    string payload =  msg.payload();
-	    printf("payload: %s\n",payload.c_str());
+	    //printf("payload: %s\n",payload.c_str());
+	    DEBUG_MSG("payload: "<<payload.c_str());
 		//get connection id from the packet
 		uint32_t connid = msg.connid();
-		printf("Conn-id: %d\n",connid);
+		//printf("Conn-id: %d\n",connid);
+		DEBUG_MSG("Conn-id: "<<connid);
 
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
-		printf("Seqnum: %d\n",seqnum);
+		//printf("Seqnum: %d\n",seqnum);
+		DEBUG_MSG("Seqnum: "<<seqnum);
 		// check for keep alive, must be checked before checking for out of order
 		if(connid != 0 && seqnum == 0) // client is still alive message
 		{
-			printf("received keep alive\n");
+			//printf("received keep alive\n");
+			DEBUG_MSG("received keep alive");
 			a_srv->receivedKeepAlive(connid);
 		}
 		/* check if message is an ACK */
@@ -275,7 +304,8 @@ void* readWorkMessage(void* arg)
 		// printf("Sending worker message to outbox with id: %d\n",connid);
 		a_srv->toOutbox(new lsp_message(connid,seqnum,""));	
 		
-		printf("END OF READ\n");
+		//printf("END OF READ\n");
+		DEBUG_MSG("END OF READ");
 	}
 }
 
@@ -287,11 +317,6 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
-		/* end thread if flagged*/
-		if(a_srv->shouldEndThreads())
-		{
-			break;
-		}
 		/* Check for if last message has reveived ACK, if not DO NOT get another message */
 		if(!a_srv->messageAcknowledged())
 		{
@@ -303,7 +328,8 @@ void* writeMessage(void* arg)
 		{
 			continue;
 		}
-		printf("reached\n");
+		//printf("reached\n");
+		DEBUG_MSG("reached");
 		string pld = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 		uint32_t connid = message->m_connid;
 		uint32_t seqnum = message->m_seqnum;
@@ -316,35 +342,45 @@ void* writeMessage(void* arg)
 		msg->set_payload(pld);
 
 		int size = msg->ByteSize(); 
-		printf("Byte Size: %d\n",size);
+		//printf("Byte Size: %d\n",size);
+		DEBUG_MSG("Byte Size: "<<size);
 		void* buffer = malloc(size);
 		if(!msg->SerializeToArray(buffer, size))
 		{
-			printf("serialize failed\n");
+			//printf("serialize failed\n");
+			DEBUG_MSG("serialize failed");
 			// return false;
 		}
 		// printf("Marshalled successfully\n");
 		// end of marshalling
 
 
-		printf("Attempting to send message\n");
+		//printf("Attempting to send message\n");
+		DEBUG_MSG("Attempting to send message");
 		// printf("Size of pld: %d\n", sizeof(pld));
 		// printf("size of msg: %d\n", sizeof(*msg));
 
 		// printf("Socket: %d\n",a_request->getSocket());
 
 		int sent;
-		printf("Client Id: %d\n",connid);
+		//printf("Client Id: %d\n",connid);
+		DEBUG_MSG("Client Id: "<<connid);
 		sockaddr_in* cliAddr = a_srv->getCliAddr(connid);
 		if(cliAddr == NULL)
 		{
-			printf("NULL client address \n");
+			//printf("NULL client address \n");
+			DEBUG_MSG("NULL client address");
 			free (buffer);
 			delete msg;
 			continue;
 		}
 		// printf("Client Address Port: %d\n",ntohs(cliAddr->sin_port));
 
+		/* end thread if flagged*/
+		if(a_srv->shouldEndThreads())
+		{
+			break;
+		}
 		if((sent = sendto(a_srv->getWriteSocket(), buffer, size, 0, (struct sockaddr *)cliAddr, sizeof(*cliAddr))) < 0) //need to get socket of client
 		{
 			perror("Sendto failed");
@@ -352,7 +388,8 @@ void* writeMessage(void* arg)
 		}
 		else
 		{
-			printf("Sent: %d bytes\n",sent);
+			//printf("Sent: %d bytes\n",sent);
+			DEBUG_MSG("Sent: "<<sent);
 		}
 		// message is not an acknowledgment
 		if(pld != "")
@@ -365,7 +402,8 @@ void* writeMessage(void* arg)
 		// Free up memory that was allocated while marshalling
 		free (buffer);
 		delete msg;
-		printf("END OF WRITE\n");
+		//printf("END OF WRITE\n");
+		DEBUG_MSG("END OF WRITE");
 	}
 }
 
@@ -382,12 +420,14 @@ void* epochTimer(void* arg)
 		}
 		/* only check every so often*/
 		sleep(a_srv->getEpoch());
-		printf("epoch has started\n");
+		//printf("epoch has started\n");
+		DEBUG_MSG("epoch has started");
 		/*Acknowledge the connection request, if no data messages have been received.*/
 		vector<uint32_t> ids = a_srv->getAwaitingMessages();
 		if(!ids.empty())
 		{
-			printf("sending ack because no data received\n");
+			//printf("sending ack because no data received\n");
+			DEBUG_MSG("sending ack because no data received");
 			// send a response to every connection that has not received a response
 			for(int i = 0; i < ids.size(); i++)
 			{
@@ -401,15 +441,18 @@ void* epochTimer(void* arg)
 				}
 			}
 		}
-		printf("one\n");
+		//printf("one\n");
+		DEBUG_MSG("one");
 		/*Acknowledge the most recently received data message, if any.*/
 		lsp_message* message = a_srv->getMostRecentMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent data message\n");
+			//printf("ack most recent data message\n");
+			DEBUG_MSG("ack most recent data message");
 			a_srv->toOutbox(message);
 		}
-		printf("two\n");
+		//printf("two\n");
+		DEBUG_MSG("two");
 		/*If a data message has been sent, but not yet acknowledged, then resend
 			the data message. */
 		if(!a_srv->messageAcknowledged())
@@ -423,10 +466,12 @@ void* epochTimer(void* arg)
 			{
 				a_srv->dropClient(connid);
 			}
-			printf("resending unacknowledged message\n");
+			//printf("resending unacknowledged message\n");
+			DEBUG_MSG("resending unacknowledged message");
 			a_srv->toOutbox(a_srv->getMessageWaiting());
 		}
-		printf("three\n");
+		//printf("three\n");
+		DEBUG_MSG("three");
 		/* If no data has been sent to a client than check for a keep alive signal */
 		ids = a_srv->getRequests();
 		for(int i = 0; i < ids.size(); i++)
@@ -465,7 +510,8 @@ lsp_server* lsp_server_create(int port)
 	lsp_server* newServer = new lsp_server(); 
 	if(newServer == NULL)
 	{
-		printf("space allocation for server failed\n");
+		//printf("space allocation for server failed\n");
+		DEBUG_MSG("space allocation for server failed");
 		delete newServer;
 		return NULL;		//return NULL if memory could not be allocated
 	}
@@ -473,7 +519,8 @@ lsp_server* lsp_server_create(int port)
 	newServer->setReadReqPort(port);
 	if((newServer->setReadReqSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
 	{
-		printf("socket creation failed\n");
+		//printf("socket creation failed\n");
+		DEBUG_MSG("socket creation failed");
 		delete newServer;
 		return NULL; // return Null on error
 	}
@@ -495,7 +542,8 @@ lsp_server* lsp_server_create(int port)
 	newServer->setReadWorkPort(port);
 	if((newServer->setReadWorkSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
 	{
-		printf("socket creation failed\n");
+		//printf("socket creation failed\n");
+		DEBUG_MSG("socket creation failed");
 		delete newServer;
 		return NULL; // return Null on error
 	}
@@ -514,7 +562,8 @@ lsp_server* lsp_server_create(int port)
 	newServer->setWritePort(port);
 	if((newServer->setWriteSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
 	{
-		printf("socket creation failed\n");
+		//printf("socket creation failed\n");
+		DEBUG_MSG("socket creation failed");
 		delete newServer;
 		return NULL; // return Null on error
 	}
@@ -649,8 +698,9 @@ vector<uint32_t> lsp_server_workersDisconnects(lsp_server* a_srv)
 }
 
 // Close connection.
-bool lsp_server_close(const lsp_server* a_srv, uint32_t conn_id)
+bool lsp_server_close(lsp_server* a_srv, uint32_t conn_id)
 {
+	a_srv->endThreads();
 	close(a_srv->getReadReqSocket());
 	close(a_srv->getReadWorkSocket());
 	close(a_srv->getWriteSocket());

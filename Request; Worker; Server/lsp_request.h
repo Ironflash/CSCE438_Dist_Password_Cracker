@@ -1,6 +1,13 @@
 #include <queue>
 #include <pthread.h>
 
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
+
 class lsp_request
 {
 private:
@@ -105,7 +112,8 @@ public:
 		m_socket = socket;
 		if(m_socket < 0)
 		{
-			printf("socket creation error\n");
+			//printf("socket creation error\n");
+			DEBUG_MSG("socket creation error");
 		}
 		return m_socket;
 	}
@@ -142,9 +150,11 @@ public:
 
 	void toInbox(lsp_message* message)
 	{
-		printf("Attempting to add to inbox\n");
+		//printf("Attempting to add to inbox\n");
+		DEBUG_MSG("Attempting to add to inbox");
 		m_inbox.push(message);
-		printf("Added to inbox\n");
+		//printf("Added to inbox\n");
+		DEBUG_MSG("Added to inbox");
 	}
 
 	void toOutbox(lsp_message* message)
@@ -156,7 +166,8 @@ public:
 
 	void toWaitbox(lsp_message* message)
 	{
-		printf("Attempting to add to inbox\n");
+		//printf("Attempting to add to inbox\n");
+		DEBUG_MSG("Attempting to add to inbox");
 		m_waitbox.push(message);
 	}
 
@@ -306,14 +317,17 @@ public:
 		/* if message Waiting is null then it isn't an acknowledgement */
 		if(m_messageWaiting == NULL)
 		{
-			printf("Reached inner\n");
+			//printf("Reached inner\n");
+			DEBUG_MSG("Reached inner");
 			pthread_mutex_unlock(&m_waitingMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_messageWaiting->m_connid);
+		//printf("Message Waiting id: %d\n",m_messageWaiting->m_connid);
+		DEBUG_MSG("Message Waiting id: "<<m_messageWaiting->m_connid);
 		m_messageAcknowledged = (m_messageWaiting->m_connid == connid && m_messageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingMessageLock);
-		printf("Reached 2\n");
+		//printf("Reached 2\n");
+		DEBUG_MSG("Reached 2");
 		return;
 	}
 	bool messageAcknowledged()
@@ -389,6 +403,13 @@ public:
 	void endThreads()
 	{
 		m_endThreads = true;
+		// void* res;
+		// pthread_join(m_readThread,&res);
+		// printf("one\n");
+		// pthread_join(m_writeThread,&res);
+		// printf("two\n");
+		// pthread_join(m_epochThread,&res);
+		// printf("three\n");
 	}
 
 	bool shouldEndThreads()

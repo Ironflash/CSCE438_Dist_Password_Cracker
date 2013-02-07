@@ -15,9 +15,15 @@
 
 #include <iostream>
 #include "request_lsp_api.c"
-//#include "netreqchannel.h"
 
 using namespace std;
+
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 /*--------------------------------------------------------------------------*/
 /* CONSTANTS/VARIABLES */
@@ -34,6 +40,13 @@ static struct lsp_request* request_channel;
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
 
+void clean_exit(){
+    cout<<"Closing Request Channel..."<<endl;
+    lsp_request_close(request_channel); // UDP-LSP
+    cout<<"Request client main completed successfully"<<endl;
+    usleep(1000000);
+}
+
 /*--------------------------------------------------------------------------*/
 /* MAIN FUNCTION */
 /*--------------------------------------------------------------------------*/
@@ -45,7 +58,7 @@ int main(int argc, char **argv) {
 
     // "test" = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
     string request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
-    int msg_length = 40;
+    int msg_length = 4;
 
     // ***********************************************************
     // getopt code
@@ -54,7 +67,7 @@ int main(int argc, char **argv) {
     cout<<"[-h <name of server host>]"<<endl;
     cout<<"[-p <port number of server host>]"<<endl;
     cout<<"[-r <hash signature request>]"<<endl;
-    cout<<"[-l <hash signature length>]"<<endl;
+    cout<<"[-l <original password length>]"<<endl;
     while ((c = getopt (argc, argv, "h:p:r:l:")) != -1) {
         switch (c) {
             case 'h':
@@ -93,152 +106,44 @@ int main(int argc, char **argv) {
     cout<<"--------name of server host = "<<host_name<<endl;
     cout<<"-port number of server host = "<<port_number<<endl;
     cout<<"-----hash signature request = "<<request_msg<<endl;
-    cout<<"------hash signature length = "<<msg_length<<endl;
+    cout<<"---original password length = "<<msg_length<<endl;
 
     // Initialize Request Client-Server Communication Channel
     cout <<"Initializing Request Channel...."<<endl;
     
     request_channel = lsp_request_create(host_name, port_number); // UDP-LSP
-    //lsp_request_create(host_name, port_number); // TCP
 
-    int msg_cnt = 0;
+    DEBUG_MSG("****************Perform Error Checking****************");
+
+    //Error Checking:
+    if (request_msg.length() != 40) {
+        cout<<"The HASH SIGNATURE you inputted is NOT VALID"<<endl;
+        return 0;
+    }
+
     lsp_request_write(request_channel,request_msg,msg_length);
-    //lsp_request_write(request_msg,msg_length); // TCP
-    
-    uint8_t* serv_response;
-    int reading;
-    //string password = lsp_request_read(serv_response); // TCP
-    //cout<<"!!! Password cracked !!!"<<endl;
-    //cout<<"Password: "<<input.c_str()<<endl;
+
+    // ***********************************************************
+    // Initialize Requester Loop
     string input;
     bool cracked = false;
     while(!cracked) {
         int numRead = lsp_request_read(request_channel,(void*) &input);
         if(numRead > 0) {
-            //printf("From Server: %s\n",input.c_str());
+            // TODO: design a nice and clean output for both cases
+            // cout Password cracked only when the returned input
+            // was "Found: ..."
             cout<<"!!!!!! Password cracked !!!!!!"<<endl;
             cout<<input<<endl;
             cracked = true;
-            //break;
         }
     }
+    // ***********************************************************
 
 	// ***********************************************************
     // Close the request client when done
-    cout<<"Closing Request Channel..."<<endl;
-    lsp_request_close(request_channel); // UDP-LSP
-    //lsp_request_close(); // TCP
-    cout<<"Request client main completed successfully"<<endl;
-    usleep(1000000);
+    clean_exit();
     // ***********************************************************
 
     return 0;
 }
-
-/*
-void *request_thread(void * arguments) {
-    // 
-    for (int j=0; j<number_of_data_requests; j++){
-        string * request = new string;
-        *request = *(string *)arguments;
-        cout<<"Thread ID: "<<pthread_self()<<"; Attempting to write message: "<< *(request) <<endl;
-        
-        // temp: simulation of server response:
-        string response;
-        while (true) {
-            serv_response.P();
-            cin >> response;
-            if (response == "ack") {
-                serv_response.V();
-                break;
-            } else {
-                cout<<"Server retrying..."<<endl;
-            }
-            serv_response.V();
-        }
-
-        cout<<"Server acknowledges Thread: "<<pthread_self()<<endl;
-
-        // INCOMPLETE: these will be called when LSP is complete
-        
-        // write to request channel *************
-        //lsp_request_write(request_channel,example,msg_length);
-        //??The server needs to know which client and what thread requested
-        //-possible solution: package message with client and thread IDs
-
-        // read server response *****************
-        //lsp_request_read();
-    }
-    cout<<"Thread: "<<pthread_self()<<" Quits"<<endl;
-    pthread_exit(NULL);
-}
-
-void create_request_threads (){
-
-    string request_message = "hello";
-    string * test  = new string;
-    *test = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
-    string * testa = new string;
-    *testa = "6d3c60eeb2ddd9cce8de6c092c091ae23ffd2264";
-    string * testb = new string;
-    *testb = "d159ab067e22da46146cc9841ad1cba346153523";
-
-    int msg_length = 40; // default = 40 characters for a hash signature
-
-    int new_thread;
-    // Create a thread for each requester
-    // INCOMPLETE: depending upon the input method for hash signatures, the thread input may change
-
-    for (int i = 0; i<number_of_requesters; i++){
-        if (i == 0) { // test
-            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)test);
-            if (new_thread){
-                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
-                exit(-1);
-            }
-        } else if (i == 1) { // testa
-            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)testa);
-            if (new_thread){
-                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
-                exit(-1);
-            }
-        } else if (i == 2) { // testb
-            new_thread = pthread_create(&r_threads[i], NULL, request_thread, (void*)testb);
-            if (new_thread){
-                cout<<"ERROR: return code from pthread_create() is "<<new_thread<<endl;
-                exit(-1);
-            }
-        }
-    }
-}
-
-void wait_for_all_threads() {
-    for (int i=0; i<number_of_requesters; i++){
-        pthread_join(r_threads[i], NULL);
-    }
-    cout<<"***************All request threads are done***************"<<endl;
-
-    // Idea: send a single quit request to the server; 
-    // the server interprets this as the request client closing
-}
-
-int main(int argc, char **argv) {
-    
-    // ***********************************************************
-    // timer for performance metrics
-    struct timeval tp_start; // Used to compute elapsed time.
-    struct timeval tp_end;
-    assert(gettimeofday(&tp_start, 0) == 0);
-    // ***********************************************************
-    
-    // ***********************************************************
-    assert(gettimeofday(&tp_end, 0) == 0);
-    printf("Time taken for computation : "); 
-    print_time_diff(&tp_start, &tp_end);
-    printf("\n");
-    clean_up_fifo();
-    atexit(clean_up_fifo);
-    return 0;
-    // ***********************************************************
-}
-*/

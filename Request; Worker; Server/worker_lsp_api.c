@@ -13,6 +13,12 @@
 #include "lsp_request.h"
 #include "lspMessage.pb.h" 
 
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 using namespace std;
 
@@ -23,7 +29,8 @@ void* readMessage(void* arg)
 	const int MAX_BUFFER = 1000;
 	void* buffer = malloc(MAX_BUFFER);
 
-	printf("Waiting\n");
+	//printf("Waiting\n");
+	DEBUG_MSG("Waiting");
 
 	sockaddr_in tempServ;
 	socklen_t sockLen = sizeof(sockaddr_in);
@@ -44,7 +51,8 @@ void* readMessage(void* arg)
 		}
 		else
 		{
-			printf("Read: %d Bytes\n",num_read);
+			//printf("Read: %d Bytes\n",num_read);
+			DEBUG_MSG("Read: "<<num_read);
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
 		// Code to unmarshall a lsp_message ... still in progress 
@@ -56,34 +64,40 @@ void* readMessage(void* arg)
 	      fprintf(stderr, "error unpacking incoming message\n");
 	      // return NULL;
 	    }
-	    printf("End of marshalling\n");
+	    //printf("End of marshalling\n");
+	    DEBUG_MSG("End of marshalling");
 	    // End of unmarshalling
 
 	    //consruct message
 	    //get payload from lsp_message
 	    string payload =  msg.payload();
 	    // *((string*)pld) = payload;		//convert the void* to a string pointer and set data to that of the string
-	    printf("payload: %s\n",payload.c_str());
+	    //printf("payload: %s\n",payload.c_str());
+	    DEBUG_MSG("payload: "<<payload.c_str());
 		//get connection id from the packet
 		uint32_t connid = msg.connid();
 		// conn_id = &connid;
-		printf("Conn-id: %d\n",connid);
+		//printf("Conn-id: %d\n",connid);
+		DEBUG_MSG("Conn-id: "<<connid);
 
 		//set current sequence number for that client
 		uint32_t seqnum = msg.seqnum();
-		printf("Seqnum: %d\n",seqnum);
+		//printf("Seqnum: %d\n",seqnum);
+		DEBUG_MSG("Seqnum: "<<seqnum);
 		
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
-			printf("ACK received for message: %d",seqnum);
+			//printf("ACK received for message: %d",seqnum);
+			DEBUG_MSG("ACK received for message: "<<seqnum);
 			a_request->checkMessageAck(connid,seqnum);
 		}
 		/* check if this is a response to a connection request */
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
 		else if(connid != 0 && seqnum == 0 && payload == "")
 		{
-			printf("Connection request response detected\n");
+			//printf("Connection request response detected\n");
+			DEBUG_MSG("Connection request response detected");
 			a_request->setConnid(connid);
 			a_request->waitingToOutbox();
 			//set connection response received
@@ -113,13 +127,16 @@ void* readMessage(void* arg)
 			// data message has been received
 			a_request->dataMessageWasReceived();
 
-			printf("sending to outbox\n");
+			//printf("sending to outbox\n");
+			DEBUG_MSG("sending to outbox");
 			/* add ACK to outbox */
-			printf("Sending ack message to outbox with id: %d\n",connid);
+			//printf("Sending ack message to outbox with id: %d\n",connid);
+			DEBUG_MSG("Sending ack message to outbox with id: "<<connid);
 			a_request->toOutbox(new lsp_message(connid,seqnum,""));	
 
 		}	
-		printf("END OF READ\n");
+		//printf("END OF READ\n");
+		DEBUG_MSG("END OF READ");
 	}
 }
 
@@ -196,24 +213,31 @@ void* writeMessage(void* arg)
 		msg->set_payload(pld);
 
 		int size = msg->ByteSize(); 
-		printf("Byte Size: %d\n",size);
+		//printf("Byte Size: %d\n",size);
+		DEBUG_MSG("Byte Size: "<<size);
 		void* buffer = malloc(size);
 		if(!msg->SerializeToArray(buffer, size))
 		{
-			printf("serialize failed\n");
+			//printf("serialize failed\n");
+			DEBUG_MSG("serialize failed");
 			// return false;
 		}
-		printf("Marshalled successfully\n");
+		//printf("Marshalled successfully\n");
+		DEBUG_MSG("Marshalled successfully");
 		// end of marshalling
 
-		printf("Attempting to send message\n");
-		printf("Size of pld: %d\n", (int)sizeof(pld));
-		printf("size of msg: %d\n", (int)sizeof(*msg));
+		//printf("Attempting to send message\n");
+		DEBUG_MSG("Attempting to send message");
+		//printf("Size of pld: %d\n", (int)sizeof(pld));
+		DEBUG_MSG("Size of pld: "<<(int)sizeof(pld));
+		//printf("size of msg: %d\n", (int)sizeof(*msg));
+		DEBUG_MSG("size of msg: "<<(int)sizeof(pld));
 
 		// printf("Socket: %d\n",a_request->getSocket());
 
 		int sent;
-		printf("Client Id: %d\n",connid);
+		//printf("Client Id: %d\n",connid);
+		DEBUG_MSG("Client Id: "<<connid);
 		sockaddr_in servAddr = a_request->getServAddr();
 
 		// string ip = "127.0.0.1"; //temp
@@ -229,7 +253,8 @@ void* writeMessage(void* arg)
 		}
 		else
 		{
-			printf("Sent: %d bytes\n",sent);
+			//printf("Sent: %d bytes\n",sent);
+			DEBUG_MSG("Sent: "<<sent);
 		}
 		//message is not an acknowledgement
 		if(pld != "")
@@ -241,7 +266,8 @@ void* writeMessage(void* arg)
 		// Free up memory that was allocated while marshalling
 		free (buffer);
 		delete msg;
-		printf("END OF WRITE\n");
+		//printf("END OF WRITE\n");
+		DEBUG_MSG("END OF WRITE");
 	}
 }
 
@@ -257,19 +283,22 @@ void* epochTimer(void* arg)
 		/*Resend a connection request, if the original connection request has not yet been acknowledged */
 		if(!a_request->connReqAcknowledged())
 		{
-			printf("resending connection request\n");
+			//printf("resending connection request\n");
+			DEBUG_MSG("resending connection request");
 			a_request->toOutbox(new lsp_message(0,0,""));
 		}
 		/*Send an acknowledgment message for the most recently received data message, or an acknowledgment with sequence number 0 if no data messages have been received*/
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent data message\n");
+			//printf("ack most recent data message\n");
+			DEBUG_MSG("ack most recent data message");
 			a_request->toOutbox(message);
 		}
 		else if(!a_request->dataMessageReceived())
  		{
- 			printf("sending keep alive signal\n");
+ 			//printf("sending keep alive signal\n");
+ 			DEBUG_MSG("sending keep alive signal");
  			a_request->toOutbox(new lsp_message(a_request->getConnid(),0,""));
 		}
 		/*If a data message has been sent, but not yet acknowledged, then resend the data message */
@@ -284,7 +313,8 @@ void* epochTimer(void* arg)
 			{
 				a_request->dropServer();
 			}
-			printf("resending unacknowledged message\n");
+			//printf("resending unacknowledged message\n");
+			DEBUG_MSG("resending unacknowledged message");
 			a_request->toOutbox(a_request->getMessageWaiting());
 		}
 	}
@@ -310,7 +340,8 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	lsp_request* newRequest = new lsp_request(); 
 	if(newRequest == NULL)
 	{
-		printf("space allocation for request failed\n");
+		//printf("space allocation for request failed\n");
+		DEBUG_MSG("space allocation for request failed");
 		delete newRequest;
 		return NULL;		//return NULL if memory could not be allocated
 	}
@@ -365,7 +396,8 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	newRequest->setPort(1334); // this needs to be dynamic
 	if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
 	{
-		printf("read socket creation failed\n");
+		//printf("read socket creation failed\n");
+		DEBUG_MSG("read socket creation failed");
 		delete newRequest;
 		return NULL; 		// return NULL on error
 	}
@@ -453,7 +485,8 @@ int lsp_request_read(lsp_request* a_request, void* pld)
 	{
 		return -1;
 	}
-	printf("non null message from inbox\n");
+	//printf("non null message from inbox\n");
+	DEBUG_MSG("non null message from inbox");
 	*((string*)pld) = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 	return message->m_bytesRead;
 }
@@ -467,14 +500,16 @@ bool lsp_request_write(lsp_request* a_request, string pld, int lth)
 	/* check if connection has been made */
 	if(a_request->getConnid() == 0)
 	{
-		printf("write with id as 0\n");
+		//printf("write with id as 0\n");
+		DEBUG_MSG("write with id as 0");
 		//if not then store messages in seperate queue until they can be added with corrent connection id 
 		a_request->toWaitbox(new lsp_message(a_request->getConnid(),a_request->nextSeq(),pld));
 
 	}
 	else
 	{	
-		printf("write with id as > 0\n");
+		//printf("write with id as > 0\n");
+		DEBUG_MSG("write with id as > 0");
 		a_request->toOutbox(new lsp_message(a_request->getConnid(),a_request->nextSeq(),pld));
 	}
 	return true;

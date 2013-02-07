@@ -2,6 +2,14 @@
 #include <map>
 #include <vector>
 #include <pthread.h>
+#include "lsp_globals.h"
+
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 /* Used to group together addr and socket of clients */
 struct clientConnection
@@ -39,7 +47,7 @@ private:
 	std::queue<lsp_message*> m_outbox;
 	std::queue<uint32_t> m_reqDis;		//store connection ids of disconnected requests
 	std::queue<uint32_t> m_workDis;		//store connection ids of disconnected workers
-	std::map<uint32_t, clientConnection> m_cliAddresses;	//keeps track of id to client addr
+	std::map<uint32_t, clientConnection> m_cliConnections;	//keeps track of id to client connections
 	std::vector<uint32_t> m_requestIds;		// list of request ids
 	std::vector<uint32_t> m_workerIds;		// list of worker ids
 	std::vector<uint32_t> m_requestDisconnects;		// list of the ids of requests that have been dropped
@@ -60,8 +68,8 @@ private:
 	bool m_messageAcknowledged;		// has last message been acknowledged
 	bool m_endThreads;
 	// bool m_isMessageWaiting;		// keeps track if there is a server message that is awaiting approval
-	int m_epoch;					// the number of seconds between epochs
-	int m_dropThreshhold;			// number of no repsonses before the connection is dropped
+	// int m_epoch;					// the number of seconds between epochs
+	// int m_dropThreshhold;			// number of no repsonses before the connection is dropped
 	int m_KAThreshhold;				// number of missed keep alives before the connection is dropped
 public:
 
@@ -74,8 +82,8 @@ public:
 		m_endThreads = false;
 		// m_isMessageWaiting = false;
 		m_mostRecentMessage = NULL;
-		m_epoch = 2;		// epoch defaults to intervals of 2 seconds
-		m_dropThreshhold = 5;		// default is 5 times
+		// m_epoch = 2;		// epoch defaults to intervals of 2 seconds
+		// m_dropThreshhold = 5;		// default is 5 times
 		m_KAThreshhold = 5;			// default is 5 times
 		// pthread_mutex_init(&m_inboxLock, NULL);
 		// pthread_mutex_init(&m_outboxLock, NULL);
@@ -137,19 +145,19 @@ public:
 		m_writeAddr = servaddr;
 	}  
 
-	void setEpoch(int seconds)
-	{
-		m_epoch = seconds;
-	}
+	// void setEpoch(int seconds)
+	// {
+	// 	m_epoch = seconds;
+	// }
 
-	void setDropThreshhold(int num)
-	{
-		m_dropThreshhold = num;
-	}
+	// void setDropThreshhold(int num)
+	// {
+	// 	m_dropThreshhold = num;
+	// }
 
 	void toCliAddr(uint32_t connid, sockaddr_in* addr)
 	{
-		m_cliAddresses[connid].addr = addr;
+		m_cliConnections[connid].addr = addr;
 	}
 
 	void toInbox(lsp_message* message)
@@ -241,37 +249,41 @@ public:
 
 	sockaddr_in* getCliAddr(uint32_t connid) 
 	{
-		printf("num cli: %d\n",(int)m_cliAddresses.size());
-		if(m_cliAddresses.empty())
+		//printf("num cli: %d\n",(int)m_cliConnections.size());
+		DEBUG_MSG("num cli: "<<(int)m_cliConnections.size());
+		if(m_cliConnections.empty())
 		{
-			printf("cliAddresses empty\n");
+			//printf("cliAddresses empty\n");
+			DEBUG_MSG("cliAddresses empty");
 			return NULL;
 		}
 		else
 		{
-			printf("cliAddresses not empty\n");
+			//printf("cliAddresses not empty\n");
+			DEBUG_MSG("cliAddresses not empty");
 		}
 		// client no longer exists
-		printf("num of clients with address %d: %d",connid,(int)m_cliAddresses.count(connid));
-		if(m_cliAddresses.count(connid) == 0)
+		//printf("num of clients with address %d: %d",connid,(int)m_cliConnections.count(connid));
+		DEBUG_MSG("num of clients with address "<<connid": "<<(int)m_cliConnections.count(connid));
+		if(m_cliConnections.count(connid) == 0)
 		{
 			return NULL;
 		}
-		sockaddr_in* result = m_cliAddresses[connid].addr;
+		sockaddr_in* result = m_cliConnections[connid].addr;
 		return result;
 	}
 
 	uint32_t getCliSeqnum(uint32_t connid)
 	{
-		if(m_cliAddresses.empty())
+		if(m_cliConnections.empty())
 		{
 			return -1;
 		}
-		if(m_cliAddresses.count(connid) == 0)
+		if(m_cliConnections.count(connid) == 0)
 		{
 			return -1;
 		}
-		uint32_t result = m_cliAddresses[connid].seqnum;
+		uint32_t result = m_cliConnections[connid].seqnum;
 		return result;
 	}
 
@@ -405,11 +417,12 @@ public:
 	/* map remove */
 	void removeCliAddr(uint32_t connid)
 	{
-		if(m_cliAddresses.count(connid) > 0)
+		if(m_cliConnections.count(connid) > 0)
 		{
-			printf("removeing addr\n");
-			std::map<uint32_t, clientConnection>::iterator it = m_cliAddresses.find(connid);
-			m_cliAddresses.erase(it);
+			//printf("removeing addr\n");
+			DEBUG_MSG("removing addr");
+			std::map<uint32_t, clientConnection>::iterator it = m_cliConnections.find(connid);
+			m_cliConnections.erase(it);
 		}
 	}
 
@@ -477,22 +490,22 @@ public:
 
 	void updateClientSeqnum(uint32_t connid,uint32_t seqnum)
 	{
-		m_cliAddresses[connid].seqnum = seqnum;
+		m_cliConnections[connid].seqnum = seqnum;
 		
 	}
 
 	void noResponse(uint32_t connid)
 	{
-		m_cliAddresses[connid].numNoResponses++;
+		m_cliConnections[connid].numNoResponses++;
 	}
 
 	bool clientAboveThreshhold(uint32_t connid)
 	{
-		if(m_cliAddresses.count(connid) == 0)
+		if(m_cliConnections.count(connid) == 0)
 		{
 			return false;
 		}
-		return m_cliAddresses[connid].numNoResponses > m_dropThreshhold;
+		return m_cliConnections[connid].numNoResponses > m_dropThreshhold;
 	}
 
 	void dropClient(uint32_t connid)
@@ -502,7 +515,8 @@ public:
 		//if the connection id is even and therefore a worker
 		if(connid % 2 == 0)
 		{
-			printf("dropping worker\n");
+			//printf("dropping worker\n");
+			DEBUG_MSG("dropping worker");
 			//add to list of disconnected workers
 			m_workerDisconnects.push_back(connid);
 			//put id up for re-assignment
@@ -517,7 +531,8 @@ public:
 		}
 		else	// the connection id is for a request
 		{
-			printf("dropping request\n");
+			//printf("dropping request\n");
+			DEBUG_MSG("dropping request");
 			//add to list of disconnected workers
 			m_requestDisconnects.push_back(connid);
 			//put id up for re-assignment
@@ -537,52 +552,53 @@ public:
 
 	bool dataSentTo(uint32_t connid)
 	{
-		if(m_cliAddresses.count(connid) > 0)
+		if(m_cliConnections.count(connid) > 0)
 		{
-			return m_cliAddresses[connid].dataSent;
+			return m_cliConnections[connid].dataSent;
 		}
 	}
 
 	void dataWasSentTo(uint32_t connid)
 	{
-		m_cliAddresses[connid].dataSent = true;
+		m_cliConnections[connid].dataSent = true;
 	}
 
 	bool keepAliveReceived(uint32_t connid)
 	{
-		if(m_cliAddresses.count(connid) == 0)
+		if(m_cliConnections.count(connid) == 0)
 		{
 			return false;
 		}
-		bool result = m_cliAddresses[connid].keepAlive;
+		bool result = m_cliConnections[connid].keepAlive;
 		//reset for next keep alive message
-		m_cliAddresses[connid].keepAlive = false;
+		m_cliConnections[connid].keepAlive = false;
 		return result;
 	}
 
 	void receivedKeepAlive(uint32_t connid)
 	{
 		//reset num no keep alive 
-		printf("num keep alive reset\n");
-		m_cliAddresses[connid].numNoKeepAlive = 0;
-		m_cliAddresses[connid].keepAlive = true;
+		//printf("num keep alive reset\n");
+		DEBUG_MSG("num keep alive reset");
+		m_cliConnections[connid].numNoKeepAlive = 0;
+		m_cliConnections[connid].keepAlive = true;
 	}
 
 	void incNoKeepAlive(uint32_t connid)
 	{
-		if(m_cliAddresses.count(connid) > 0)
+		if(m_cliConnections.count(connid) > 0)
 		{
-			m_cliAddresses[connid].numNoKeepAlive++;
+			m_cliConnections[connid].numNoKeepAlive++;
 		}
 	}
 
 	bool clientAboveKAThreshhold(uint32_t connid)
 	{
-		if(m_cliAddresses.count(connid) == 0)
+		if(m_cliConnections.count(connid) == 0)
 		{
 			return false;
 		}
-		return m_cliAddresses[connid].numNoKeepAlive >  m_KAThreshhold;
+		return m_cliConnections[connid].numNoKeepAlive >  m_KAThreshhold;
 	}
 
 	void endThreads()
