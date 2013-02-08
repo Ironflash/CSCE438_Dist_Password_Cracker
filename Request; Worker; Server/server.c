@@ -44,12 +44,18 @@ static int requests_being_processed = 0;
 static int number_available_workers = 0;
 static int workers_processing_requests = 0;
 
+// Print Debugging:
+static int state_tracker = 0;
+bool print_out = true;
+
+pthread_mutex_t print_status_lock;
+
 /*--------------------------------------------------------------------------*/
 /* FORWARDS */
 /*--------------------------------------------------------------------------*/
 
 //void handle_process_loop(int * _fd);
-void print_server_status();
+void print_server_status(bool print_out);
 
 /*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS -- TCP Socket Read/Write */
@@ -158,8 +164,9 @@ void * get_available_worker(void * args) {
 			uint32_t worker_id = workers.front();
 			DEBUG_MSG("worker fd to pop = "<<worker_id);
 			workers.pop();
-			print_server_status();
 			number_available_workers = workers.size();
+			workers_processing_requests++;
+			print_server_status(print_out);
 
 			lsp_server_write(server_channel,*request,0,worker_id);
 			break;
@@ -173,24 +180,28 @@ void process_request_udp(uint32_t client_id, string * message){
 	if ((*message).length() == 40) { // From requester
 		DEBUG_MSG("******REQUESTER******");
 		requesters.push(client_id);
-		print_server_status();
+		requests_being_processed++;
+		print_server_status(print_out);
 		DEBUG_MSG("Send request to worker");
 		pthread_t thread_id;
   		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);  		
 	} else if ((*message) == "join") {
 		DEBUG_MSG("******WORKER******");
 		workers.push(client_id);
-		print_server_status();
 		DEBUG_MSG("pushing worker (address): "<<client_id);
 		number_available_workers = workers.size();
-	} else if ((*message).compare(0, 6, "Found:") == 0) {
+		print_server_status(print_out);
+	} else if ( ((*message).compare(0, 6, "Found:") == 0) || 
+				((*message).compare(0, 9, "Not Found") == 0) ) {
 		DEBUG_MSG("******WORKER******");
 		DEBUG_MSG("return password to requester");
 		uint32_t requester_id = requesters.front();
 		DEBUG_MSG("requester fd to pop = "<<requester_id);
 		//socket_write(request, _fd);
 		requesters.pop();
-		print_server_status();
+		requests_being_processed--;
+		workers_processing_requests--;
+		print_server_status(print_out);
 		lsp_server_write(server_channel,*message,0,requester_id);
 		DEBUG_MSG("******Finished sending to requester******");
 	} else {
@@ -198,47 +209,53 @@ void process_request_udp(uint32_t client_id, string * message){
 	}
 }
 
-void print_server_status(){
-	int line_width = 30;
-	cout<<"Total Requests Received"<<endl;
-	cout<<"[";
-	for (int i=0; i<total_received_requests; i++) {
-		cout<<":";
-	}
-	for (int i=0; i<(line_width-total_received_requests); i++) {
-		cout<<" ";
-	}
-	cout<<"]"<<endl;;
+void print_server_status(bool print_out_bool){
+	if (print_out_bool == true) {
+		int line_width = 30;
+		state_tracker++;
+		pthread_mutex_lock(&print_status_lock);
+		cout<<"******************************************"<<state_tracker<<endl;
+		cout<<"Total Requests Received"<<endl;
+		cout<<"[";
+		for (int i=0; i<total_received_requests; i++) {
+			cout<<":";
+		}
+		for (int i=0; i<(line_width-total_received_requests); i++) {
+			cout<<" ";
+		}
+		cout<<"]"<<endl;;
 
-	cout<<"Requests Being Processed"<<endl;
-	cout<<"[";
-	for (int i=0; i<requests_being_processed; i++) {
-		cout<<":";
-	}
-	for (int i=0; i<(line_width-requests_being_processed); i++) {
-		cout<<" ";
-	}
-	cout<<"]"<<endl;;
-	
-	cout<<"Available Workers"<<endl;
-	cout<<"[";
-	for (int i=0; i<number_available_workers; i++) {
-		cout<<":";
-	}
-	for (int i=0; i<(line_width-number_available_workers); i++) {
-		cout<<" ";
-	}
-	cout<<"]"<<endl;;
+		cout<<"Requests Being Processed"<<endl;
+		cout<<"[";
+		for (int i=0; i<requests_being_processed; i++) {
+			cout<<":";
+		}
+		for (int i=0; i<(line_width-requests_being_processed); i++) {
+			cout<<" ";
+		}
+		cout<<"]"<<endl;;
+		
+		cout<<"Available Workers"<<endl;
+		cout<<"[";
+		for (int i=0; i<number_available_workers; i++) {
+			cout<<":";
+		}
+		for (int i=0; i<(line_width-number_available_workers); i++) {
+			cout<<" ";
+		}
+		cout<<"]"<<endl;;
 
-	cout<<"Workers Processing Requests"<<endl;
-	cout<<"[";
-	for (int i=0; i<workers_processing_requests; i++) {
-		cout<<":";
+		cout<<"Workers Processing Requests"<<endl;
+		cout<<"[";
+		for (int i=0; i<workers_processing_requests; i++) {
+			cout<<":";
+		}
+		for (int i=0; i<(line_width-workers_processing_requests); i++) {
+			cout<<" ";
+		}
+		cout<<"]"<<endl;;
+		pthread_mutex_unlock(&print_status_lock);
 	}
-	for (int i=0; i<(line_width-workers_processing_requests); i++) {
-		cout<<" ";
-	}
-	cout<<"]"<<endl;;
 }
 
 
@@ -249,6 +266,7 @@ void print_server_status(){
 int main(int argc, char **argv) {
 
 	unsigned short port_number = 7000;
+	pthread_mutex_init(&print_status_lock, NULL);
 
 	// ***********************************************************
     // getopt code
@@ -289,7 +307,7 @@ int main(int argc, char **argv) {
     //uint32_t send_response_to;
 	int num_read;
 	//int answer_length = 4;
-	print_server_status();
+	print_server_status(print_out);
 	while(true) {
 		//cout<<"!!!!!!!!!!!!! Attempting to read !!!!!!!!!!!!!"<<endl;
 		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);

@@ -1,5 +1,6 @@
 #include <queue>
 #include <pthread.h>
+#include "lsp_globals.h"
 
 //#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
@@ -38,9 +39,9 @@ private:
 	bool m_endThreads;				// flag for ending threads
 	uint32_t m_nextSeqnum;
 	uint32_t m_lastServerSeqnum;	// the last sequence number recieved from the server
-	int m_epoch;					// the number of seconds between epochs
+	//int m_epoch;					// the number of seconds between epochs
 	int m_numNoResponses;
-	int m_dropThreshhold;			// number of no repsonses before the connection is dropped
+	//int m_dropThreshhold;			// number of no repsonses before the connection is dropped
 public:
 
 	lsp_request()
@@ -49,8 +50,8 @@ public:
 		m_nextSeqnum = 0;
 		m_lastServerSeqnum = 0;
 		m_numNoResponses = 0;
-		m_epoch = 2;		// epoch defaults to intervals of 2 seconds
-		m_dropThreshhold = 5; // default is 5 no responses
+		//m_epoch = 2;		// epoch defaults to intervals of 2 seconds
+		//m_dropThreshhold = 5; // default is 5 no responses
 		m_messageAcknowledged = true;
 		m_dataMessRcvd = false;
 		m_endThreads = false;
@@ -133,6 +134,7 @@ public:
 		m_connid = connid;
 	}
 
+	/*
 	void setEpoch(int seconds)
 	{
 		m_epoch = seconds;
@@ -142,6 +144,7 @@ public:
 	{
 		m_dropThreshhold = num;
 	}
+	*/
 
 	void setMostRecentMessage(lsp_message* message)
 	{
