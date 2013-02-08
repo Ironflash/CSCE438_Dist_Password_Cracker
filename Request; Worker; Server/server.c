@@ -46,7 +46,7 @@ static int workers_processing_requests = 0;
 
 // Print Debugging:
 static int state_tracker = 0;
-bool print_out = true;
+bool print_out = false;
 
 pthread_mutex_t print_status_lock;
 

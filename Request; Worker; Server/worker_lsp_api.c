@@ -13,7 +13,7 @@
 #include "lsp_request.h"
 #include "lspMessage.pb.h" 
 
-//#define DEBUG // uncomment to turn on print outs
+#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
 #define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
 #else
@@ -122,6 +122,8 @@ void* readMessage(void* arg)
 			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
 			{
 				// drop the message
+				//DEBUG_MSG("sequence incorrect was:" <<seqnum, <<"should of been: "<<a_request->getLastSeqnum());
+				cout<<"sequence incorrect was:" <<seqnum <<"should of been: "<<(a_request->getLastSeqnum()+1);
 				continue;
 			}
 			/* Add message to inbox */
