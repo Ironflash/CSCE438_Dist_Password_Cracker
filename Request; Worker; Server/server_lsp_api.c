@@ -60,6 +60,15 @@ void* readReqMessage(void* arg)
 			//printf("Read: %d Bytes\n",num_read);
 			DEBUG_MSG("Read: "<<num_read);
 		}
+		//Drop Percentage of Packets
+		// get random numger 1 - 10
+		int randNum = rand() % 10 + 1;
+		if(randNum <= m_dropRate*10)
+		{
+			//drop packet
+			printf("Dropping Packet\n");
+			continue;
+		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
 		// Code to unmarshall a lsp_message ... still in progress 
 		GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -207,6 +216,16 @@ void* readWorkMessage(void* arg)
 		{
 			//printf("Read: %d Bytes\n",num_read);
 			DEBUG_MSG("Read: "<<num_read);
+		}
+
+		//Drop Percentage of Packets
+		// get random numger 1 - 10
+		int randNum = rand() % 10 + 1;
+		if(randNum <= m_dropRate*10)
+		{
+			//drop packet
+			printf("Dropping Packet\n");
+			continue;
 		}
 		// Code to unmarshall a lsp_message ... still in progress 
 		GOOGLE_PROTOBUF_VERIFY_VERSION;
