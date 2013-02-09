@@ -12,13 +12,8 @@
 class lsp_request
 {
 private:
-	// int m_readPort;		//port for reading
-	// int m_readSocket;		//socket for reading
-	// int m_writePort;		//port for writing
-	// int m_writeSocket;		//socket for writing
 	int m_port;		// request's port
 	int m_socket;		// request's socket
-	// struct sockaddr_in m_readAddr,m_writeAddr, 
 	struct sockaddr_in m_servAddr;	//address of the server 
 	struct sockaddr_in m_addr; // address of client
 	std::queue<lsp_message*> m_inbox;
@@ -33,15 +28,12 @@ private:
 	lsp_message* m_messageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_mostRecentMessage;
 	bool m_messageAcknowledged;		// has last message been acknowledged
-	// bool m_isMessageWaiting;
 	bool m_connectionAcknowledged;
 	bool m_dataMessRcvd;
 	bool m_endThreads;				// flag for ending threads
 	uint32_t m_nextSeqnum;
 	uint32_t m_lastServerSeqnum;	// the last sequence number recieved from the server
-	//int m_epoch;					// the number of seconds between epochs
 	int m_numNoResponses;
-	//int m_dropThreshhold;			// number of no repsonses before the connection is dropped
 public:
 
 	lsp_request()
@@ -67,41 +59,6 @@ public:
 		pthread_mutex_destroy(&m_outboxLock);
 	}
 	/* setters */
-	// void setReadPort(int port)
-	// {
-	// 	m_readPort = port;
-	// }
-
-	// int setReadSocket(int socket)
-	// {
-	// 	m_readSocket = socket;
-	// 	if(m_readSocket < 0)
-	// 	{
-	// 		printf("socket creation error\n");
-	// 	}
-	// 	return m_readSocket;
-	// }
-
-	// void setReadAddr(struct sockaddr_in servaddr)
-	// {
-	// 	m_readAddr = servaddr;
-	// }
-
-	// void setWritePort(int port)
-	// {
-	// 	m_writePort = port;
-	// }
-
-	// int setWriteSocket(int socket)
-	// {
-	// 	m_writeSocket = socket;
-	// 	return m_writeSocket;
-	// }
-
-	// void setWriteAddr(struct sockaddr_in servaddr)
-	// {
-	// 	m_writeAddr = servaddr;
-	// }
 
 	void setPort(int port)
 	{
@@ -133,18 +90,6 @@ public:
 	{
 		m_connid = connid;
 	}
-
-	/*
-	void setEpoch(int seconds)
-	{
-		m_epoch = seconds;
-	}
-
-	void setDropThreshhold(int num)
-	{
-		m_dropThreshhold = num;
-	}
-	*/
 
 	void setMostRecentMessage(lsp_message* message)
 	{
@@ -189,36 +134,6 @@ public:
 	}
 
 	/* getters */
-
-	// int getReadPort() const
-	// {
-	// 	return m_readPort;
-	// }
-
-	// int getReadSocket() const
-	// {
-	// 	return m_readSocket;
-	// }
-
-	// struct sockaddr_in getReadAddr()
-	// {
-	// 	return m_readAddr;
-	// }
-
-	// int getWritePort() const
-	// {
-	// 	return m_writePort;
-	// }
-
-	// int getWriteSocket() const
-	// {
-	// 	return m_writeSocket;
-	// }
-
-	// struct sockaddr_in getWriteAddr()
-	// {
-	// 	return m_writeAddr;
-	// }
 
 	int getPort() const
 	{
@@ -406,13 +321,6 @@ public:
 	void endThreads()
 	{
 		m_endThreads = true;
-		// void* res;
-		// pthread_join(m_readThread,&res);
-		// printf("one\n");
-		// pthread_join(m_writeThread,&res);
-		// printf("two\n");
-		// pthread_join(m_epochThread,&res);
-		// printf("three\n");
 	}
 
 	bool shouldEndThreads()

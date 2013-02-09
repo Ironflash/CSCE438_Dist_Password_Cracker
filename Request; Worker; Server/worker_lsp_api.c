@@ -103,8 +103,13 @@ void* readMessage(void* arg)
 		}
 		/* check if this is a response to a connection request */
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
-		else if(connid != 0 && seqnum == 0 && payload == "")
+		else if(connid != 0 && seqnum == 0 && payload == "" && a_request->getConnid() == 0)
 		{
+			//check if already received response to connection response
+			// if(a_request->connReqAcknowledged())
+			// {
+			// 	continue;
+			// }
 			//printf("Connection request response detected\n");
 			DEBUG_MSG("Connection request response detected");
 			a_request->setConnid(connid);
@@ -151,48 +156,6 @@ void* readMessage(void* arg)
 	}
 }
 
-// void* writeMessageold(void* arg)
-// {
-// 	lsp_request* a_request = (lsp_request*) arg;
-// 	// Code to marshall a lsp_message
-// 	printf("Pld: %s\n",pld.c_str());
-// 	GOOGLE_PROTOBUF_VERIFY_VERSION;
-// 	lspMessage::LspMessage* msg = new lspMessage::LspMessage();
-// 	msg->set_connid(connid); 
-// 	msg->set_seqnum(seqnum); 
-// 	msg->set_payload(pld);
-
-// 	int size = msg->ByteSize(); 
-// 	printf("Byte Size: %d\n",size);
-// 	void *buffer = malloc(size);
-// 	if(!msg->SerializeToArray(buffer, size))
-// 	{
-// 		printf("serialize failed\n");
-// 		return false;
-// 	}
-// 	printf("Marshalled successfully\n");
-// 	// end of marshalling
-
-// 	printf("Attempting to send message\n");
-// 	printf("Size of pld: %d\n", sizeof(pld));
-// 	printf("size of msg: %d\n", sizeof(*msg));
-// 	printf("Socket: %d\n",a_request->getWriteSocket());
-
-// 	int sent;
-// 	//need to convert the string to a char* for sendto
-// 	if((sent = sendto(a_request->getWriteSocket(), buffer, size, 0, (struct sockaddr *)&a_request->getWriteAddr(), sizeof(a_request->getWriteAddr()))) < 0)
-// 	{
-// 		perror("Sendto failed");
-// 	   return false;
-// 	}
-// 	else
-// 	{
-// 		printf("Sent: %d bytes\n",sent);
-// 	}
-// 	// Free up memory that was allocated while marshalling
-// 	delete buffer;
-// 	delete msg;
-// }
 /* sends a message over the network*/
 void* writeMessage(void* arg)
 {
@@ -292,7 +255,8 @@ void* epochTimer(void* arg)
 		sleep(a_request->getEpoch());
 		
 		/*Resend a connection request, if the original connection request has not yet been acknowledged */
-		if(!a_request->connReqAcknowledged())
+		// if(!a_request->connReqAcknowledged())
+		if(a_request->getConnid() == 0)
 		{
 			//printf("resending connection request\n");
 			DEBUG_MSG("resending connection request");
@@ -302,11 +266,11 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			//printf("ack most recent data message\n");
+			printf("ack most recent data message %s\n",message->m_payload.c_str());
 			DEBUG_MSG("ack most recent data message");
 			a_request->toOutbox(message);
 		}
-		else if(!a_request->dataMessageReceived())
+		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0)
  		{
  			//printf("sending keep alive signal\n");
  			DEBUG_MSG("sending keep alive signal");
@@ -316,17 +280,20 @@ void* epochTimer(void* arg)
 		if(!a_request->messageAcknowledged())
 		{
 			lsp_message* message = a_request->getMessageWaiting();
-			uint32_t connid = message->m_connid;
-			//increase the number of no responses from a client
-			a_request->noResponse();
-			//determin if the number of no responses is above the threshhold
-			if(a_request->serverAboveThreshhold())
+			if(message != NULL)
 			{
-				a_request->dropServer();
+				uint32_t connid = message->m_connid;
+				//increase the number of no responses from a client
+				a_request->noResponse();
+				//determin if the number of no responses is above the threshhold
+				if(a_request->serverAboveThreshhold())
+				{
+					a_request->dropServer();
+				}
+				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged message");
+				a_request->toOutbox(a_request->getMessageWaiting());
 			}
-			//printf("resending unacknowledged message\n");
-			DEBUG_MSG("resending unacknowledged message");
-			a_request->toOutbox(a_request->getMessageWaiting());
 		}
 	}
 

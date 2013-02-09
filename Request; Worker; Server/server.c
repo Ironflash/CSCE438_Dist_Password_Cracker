@@ -177,7 +177,8 @@ void * get_available_worker(void * args) {
 
 void process_request_udp(uint32_t client_id, string * message){
 	//From requester or worker?
-	if ((*message).length() == 40) { // From requester
+	// if ((*message).length() == 40) { // From requester
+	if (client_id % 2 == 1) {
 		DEBUG_MSG("******REQUESTER******");
 		requesters.push(client_id);
 		requests_being_processed++;

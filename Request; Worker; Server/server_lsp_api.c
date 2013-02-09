@@ -117,17 +117,17 @@ void* readReqMessage(void* arg)
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
 		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
-			// printf("Connection request detected\n");
+			printf("Connection request detected from request\n");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
-			if(a_srv->hasReqDisconnect())
-			{
-				connid = a_srv->nextReqDis();
-			}
-			else
-			{
+			// if(a_srv->hasReqDisconnect())
+			// {
+			// 	connid = a_srv->nextReqDis();
+			// }
+			// else
+			// {
 				connid = a_srv->nextReqId();
-			}
+			// }
 			/* add client to list of clients*/
 			// printf("Client Address Port from read: %d\n",ntohs(tempCli->sin_port));
 			// printf("Client Id from read: %d\n",connid);
@@ -271,16 +271,17 @@ void* readWorkMessage(void* arg)
 		/* check if this is a connection request */
 		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
+			printf("Connection request detected from worker\n");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
-			if(a_srv->hasWorkDisconnect())
-			{
-				connid = a_srv->nextWorkDis();
-			}
-			else
-			{
+			// if(a_srv->hasWorkDisconnect())
+			// {
+			// 	connid = a_srv->nextWorkDis();
+			// }
+			// else
+			// {
 				connid = a_srv->nextWorkId();
-			}
+			// }
 			/* add client to list of clients*/
 			a_srv->toCliAddr(connid,tempCli);
 			a_srv->updateClientSeqnum(connid,seqnum);
@@ -466,7 +467,7 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_srv->getMostRecentMessage();
 		if(message != NULL)
 		{
-			//printf("ack most recent data message\n");
+			printf("ack most recent data message %s\n",message->m_payload.c_str());
 			DEBUG_MSG("ack most recent data message");
 			a_srv->toOutbox(message);
 		}
@@ -477,17 +478,20 @@ void* epochTimer(void* arg)
 		if(!a_srv->messageAcknowledged())
 		{
 			lsp_message* message = a_srv->getMessageWaiting();
-			uint32_t connid = message->m_connid;
-			//increase the number of no responses from a client
-			a_srv->noResponse(connid);
-			//determin if the number of no responses is above the threshhold
-			if(a_srv->clientAboveThreshhold(connid))
+			if(message != NULL)
 			{
-				a_srv->dropClient(connid);
+				uint32_t connid = message->m_connid;
+				//increase the number of no responses from a client
+				a_srv->noResponse(connid);
+				//determin if the number of no responses is above the threshhold
+				if(a_srv->clientAboveThreshhold(connid))
+				{
+					a_srv->dropClient(connid);
+				}
+				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged message");
+				a_srv->toOutbox(a_srv->getMessageWaiting());
 			}
-			//printf("resending unacknowledged message\n");
-			DEBUG_MSG("resending unacknowledged message");
-			a_srv->toOutbox(a_srv->getMessageWaiting());
 		}
 		//printf("three\n");
 		DEBUG_MSG("three");
@@ -690,7 +694,7 @@ bool lsp_server_write(lsp_server* a_srv, string payload, int lth, uint32_t conn_
 	{
 		return false;
 	}
-	a_srv->toOutbox(new lsp_message(conn_id,a_srv->nextSeq(),payload));
+	a_srv->toOutbox(new lsp_message(conn_id,a_srv->nextSeq(conn_id),payload));
 	return true;
 }
 
