@@ -16,6 +16,7 @@ struct clientConnection
 {
 	sockaddr_in* addr;
 	uint32_t seqnum;
+	uint32_t nextServSeqnum;
 	int numNoResponses;
 	int numNoKeepAlive;
 	bool dataSent;
@@ -26,6 +27,7 @@ struct clientConnection
 		numNoResponses = 0;
 		numNoKeepAlive = 0;
 		seqnum = 0;
+		nextServSeqnum = 1;
 		dataSent = false;
 		keepAlive = false;
 	}
@@ -373,9 +375,14 @@ public:
 		return result;
 	}
 
-	uint32_t nextSeq()
+	uint32_t nextSeq(uint32_t connid)
 	{
-		return m_nextSeqnum++;
+		// return m_nextSeqnum++;
+		if(m_cliConnections.count(connid) == 0)
+		{
+			return -1;
+		}
+		return m_cliConnections[connid].nextServSeqnum++;
 	}
 
 	uint32_t nextReqDis()

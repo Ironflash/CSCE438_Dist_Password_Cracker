@@ -12,6 +12,7 @@
 #include "lsp_message.c"
 #include "lsp_request.h"
 #include "lspMessage.pb.h" 
+#include <sstream>
 
 #include <iostream>
 
@@ -120,10 +121,16 @@ void* readMessage(void* arg)
 		}
 		/* check if this is a response to a connection request */
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
-		else if(connid != 0 && seqnum == 0 && payload == "")
+		else if(connid != 0 && seqnum == 0 && payload == "" && a_request->getConnid() == 0)
 		{
-			//printf("Connection request response detected\n");
+
+			// printf("Connection request response detected\n");
 			DEBUG_MSG("Connection request response detected");
+			//check if already received response to connection response
+			// if(a_request->connReqAcknowledged())
+			// {
+			// 	continue;
+			// }
 			a_request->setConnid(connid);
 			a_request->waitingToOutbox();
 			//set connection response received
@@ -334,11 +341,11 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			//printf("ack most recent data message\n");
+			printf("ack most recent data message %s\n",message->m_payload.c_str());
 			DEBUG_MSG("ack most recent data message");
 			a_request->toOutbox(message);
 		}
-		else if(!a_request->dataMessageReceived())
+		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0)
  		{
  			//printf("sending keep alive signal\n");
  			DEBUG_MSG("sending keep alive signal");
@@ -348,17 +355,20 @@ void* epochTimer(void* arg)
 		if(!a_request->messageAcknowledged())
 		{
 			lsp_message* message = a_request->getMessageWaiting();
-			uint32_t connid = message->m_connid;
-			//increase the number of no responses from a client
-			a_request->noResponse();
-			//determin if the number of no responses is above the threshhold
-			if(a_request->serverAboveThreshhold())
+			if(message != NULL)
 			{
-				a_request->dropServer();
+				uint32_t connid = message->m_connid;
+				//increase the number of no responses from a client
+				a_request->noResponse();
+				//determin if the number of no responses is above the threshhold
+				if(a_request->serverAboveThreshhold())
+				{
+					a_request->dropServer();
+				}
+				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged message");
+				a_request->toOutbox(a_request->getMessageWaiting());
 			}
-			//printf("resending unacknowledged message\n");
-			DEBUG_MSG("resending unacknowledged message");
-			a_request->toOutbox(a_request->getMessageWaiting());
 		}
 	}
 
@@ -537,9 +547,10 @@ int lsp_request_read(lsp_request* a_request, void* pld)
 // Request Write. Should not send NULL
 bool lsp_request_write(lsp_request* a_request, string pld, int lth)
 {
-	// string payload = *((string*)pld);
-	/*perform check on input*/
-
+	//Uncomment these lines to add the length to the payload
+	std::stringstream ss;
+	ss<<pld<<"LENGTH"<<lth<<"";
+	pld = ss.str();
 	/* check if connection has been made */
 	if(a_request->getConnid() == 0)
 	{
