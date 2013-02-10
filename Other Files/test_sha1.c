@@ -1,26 +1,23 @@
 /* 
-    File: worker.c
+    File: request.c
 
-    Author: Daniel Timothy S. Tan
-            Department of Computer Science
-            Texas A&M University
-    Date  : 01/30/2013
+    Authors: Daniel Timothy S. Tan
+             Department of Computer Science
+             Texas A&M University
+    Date   : 01/30/2013
 
-    worker client main program for HW2 in CSCE 438-500
+    request client main program for HW2 in CSCE 438-500
 */
 
 /*--------------------------------------------------------------------------*/
 /* INCLUDES */
 /*--------------------------------------------------------------------------*/
 
-#include <string>
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <assert.h>
 #include <sys/time.h>
-
-#include "worker_lsp_api.c"
 
 //#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
@@ -44,9 +41,6 @@ static string alphabet[26] = { "a","b","c","d","e","f","g","h","i","j","k","l","
 
 static string answer;
 static bool stop_searching = false;
-
-// Create Request Client-Server Communication channel
-static struct lsp_request* worker_channel;
 
 /*--------------------------------------------------------------------------*/
 /* DATA STRUCTURES */ 
@@ -91,7 +85,7 @@ void update_indices(int pos, int int_array[], int limit) {
 
 string run_sha1sum(const char * possible_password){
     const char * system_call_a = "echo -n ";
-    const char * system_call_b = " | shasum | awk '{print $1}'";
+    const char * system_call_b = " | sha1sum | awk '{print $1}'";
     char system_call[100];
     strcpy(system_call, system_call_a);
     strcat(system_call, possible_password);
@@ -199,37 +193,99 @@ void password_cracker(int length, int start, int stop) {
     if (stop_searching == true) {
         cout<<"****************YAY FOUND PASSWORD****************"<<endl;
         cout<<"Hash : "<<request_hash<<endl;
-        string found_string = "Found: ";
-        answer = found_string+answer;
-        cout<<answer<<endl;
+        cout<<"Found: "<<answer<<endl;
     } else {
         cout<<"**************ALL THAT FOR NOTHING?!**************"<<endl;
         cout<<"Hash : "<<request_hash<<endl;
         answer = "Not found";
     }
     //lsp_request_write(worker_channel,result,result.length()); //UDP-LSP
-    lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
 }
 
-/*
-void password_cracker(string hash) {
-    // write the algorithm for password cracking
-    // for loop - iterate from a-z, aa-zz, .. aaaaaa - zzzzzz
-    // password found
-    string found = "Found: ";
-    string password = "test";
-    // password not found: answer = Not found
-    string answer = found+password;
-    cout<<"FOUND PASSWORD: "<<password<<endl;
-    lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
-}
-//*/
+void gather_statistics(int password_length) {
+    if (number_of_worker_threads > 25) {
+        number_of_worker_threads = 25;
+    }
+    //temp if statement for testing
+    if (password_length == 1) {
+        // original password = t
+        request_hash = "8efd86fb78a56a5145ed7739dcb00c78581c5375";
+    } else if (password_length == 2) {
+        // original password = te
+        request_hash = "33e9505d12942e8259a3c96fb6f88ed325b95797";
+    } else if (password_length == 3) {
+        // original password = tes
+        request_hash = "d1c056a983786a38ca76a05cda240c7b86d77136";
+    } else if (password_length == 4) {
+        // original password = test
+        request_hash = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
+    } else if (password_length == 5) {
+        // original password = testi
+        request_hash = "f1e1c6ea766397606475ab41d7f124258da887b9";
+    } else if (password_length == 6) {
+        // original password = testin
+        request_hash = "cfa81791b86dd893086557134603dfa4c58fd977";
+    } else if (password_length == 7) {
+        // original password = testing
+        request_hash = "dc724af18fbdd4e59189f5fe768a5f8311527050";
+    } else {
+        cout<<"ERROR"<<endl;
+    }
 
-void send_join_request(){
-    // send a join request to the server
-    int msg_length = 4;
-    string request_msg = "join";
-    lsp_request_write(worker_channel,request_msg,msg_length); //UDP-LSP
+    // ***********************************************************
+    // Timer for performance metrics; Used to compute elapsed time.
+    struct timeval tp_start;
+    struct timeval tp_end;
+    assert(gettimeofday(&tp_start, 0) == 0);
+    // ***********************************************************
+
+    int start_char = 0;
+    int stop_char = 25;
+    
+    password_cracker(password_length, start_char, stop_char);
+
+    // ***********************************************************
+    // Timer for performance metrics; Used to compute elapsed time.
+    assert(gettimeofday(&tp_end, 0) == 0);
+    printf("Time taken for computation : "); 
+    print_time_diff(&tp_start, &tp_end);
+    // ***********************************************************
+}
+
+void print_out_statistics(int password_length) {
+    cout<<"Password Length = "<<password_length<<endl;
+    cout<<"1\t2\t3\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\t15\t16\t17\t18\t19\t20"<<endl;
+    for (int j=0; j<20; j++) {
+        cout<<musecs[j]<<"\t";
+    }
+    cout<<endl;
+    for (int j=0; j<20; j++) {
+        cout<<secs[j]<<"\t";
+    }
+    cout<<endl;
+    /*
+    ofstream write_to1 ("example.txt");
+    
+    cout << "Prepare to write results to text file! =D"<<endl;
+    
+    if (write_to1.is_open()) {
+        write_to1<<"Password Length = "<<password_length<<endl;
+        write_to1<<"1\t2\t3\t4\t5\t6\t7\t8\t9\t10\t11\t12\t13\t14\t15\t16\t17\t18\t19\t20"<<endl;
+        for (int j=1; j<21; j++) {
+            write_to1<<musecs[j]<<"\t";
+        }
+        write_to1<<endl;
+        for (int j=1; j<21; j++) {
+            write_to1<<secs[j]<<"\t";
+        }
+        write_to1<<endl;
+
+        cout<<endl<<"*******************************************"<<endl;
+        write_to1.close();
+    } else {
+        cout << "Unable to open file"<<endl; 
+    }
+    //*/
 }
 
 /*--------------------------------------------------------------------------*/
@@ -237,102 +293,27 @@ void send_join_request(){
 /*--------------------------------------------------------------------------*/
 
 int main(int argc, char **argv) {
-    // Initialization
 
-    const char * host_name = "localhost";
-    unsigned short port_number = 1235;
+    int password_length = 3;
+    cin>>password_length;
+    cin>>number_of_worker_threads;
+    gather_statistics(password_length);
 
-    number_of_worker_threads = 3;
-
-    // ***********************************************************
-    // getopt code
-    int index;
-    int c = 0;
-    cout<<"[-w <number of worker threads>]"<<endl;
-    cout<<"[-h <name of server host>]"<<endl;
-    cout<<"[-p <port number of server host>]"<<endl;
-    while ((c = getopt (argc, argv, "h:p:r:l:")) != -1) {
-        switch (c) {
-            case 'w':
-                number_of_worker_threads = atoi(optarg);
-                break;
-            case 'h':
-                host_name = optarg;
-                break;
-            case 'p':
-                port_number = (unsigned short)(atoi(optarg));
-                break;
-            case '?':
-                if ((optopt == 'w') ||
-                    (optopt == 'h') || 
-                    (optopt == 'p')) {
-                    cout<<"ERROR: Option -"<<optopt<<" requires an argument"<<endl;
-                } else if (isprint (optopt)) {
-                    cout<<"ERROR: Unknown option for -"<<optopt<<endl;
-                } else {
-                    cout<<"ERROR: Unknown option character"<<endl;
-                }
-                return 1;
-            default:
-                abort ();
+    /*
+    // special case: password_length = 0 & number_of_worker_threads = 0
+    if (password_length == 0 && number_of_worker_threads == 0) {
+        cin>>password_length;
+        for (int j=1; j<21; j++) {
+            number_of_worker_threads = j;
+            gather_statistics(password_length);
         }
+        print_out_statistics(password_length);
+    } else if (password_length > 0 && number_of_worker_threads > 0) {
+        gather_statistics(password_length);
+    } else {
+        cout<<"Bad Input: Try again...."<<endl;
     }
-    for (index = optind; index < argc; index++) {
-        printf ("Non-option argument %s\n", argv[index]);
-    }
-    // ***********************************************************
-
-    if (number_of_worker_threads > 25) {
-        number_of_worker_threads = 25;
-    }
-
-    cout<<"-----------number of worker threads = "<<number_of_worker_threads<<endl;
-    cout<<"----------------name of server host = "<<host_name<<endl;
-    cout<<"---------port number of server host = "<<port_number<<endl;
-    
-    w_threads = new pthread_t [number_of_worker_threads];
-
-    // Initialize threads:
-    cout <<"Initializing Worker Channel...."<<endl;
-    worker_channel = lsp_request_create(host_name,port_number);
-
-    send_join_request();
-
-    int start_char = 0;
-    int stop_char = 25;
-    int password_length;
-
-    // ***********************************************************
-    // Initialize Worker Loop
-    string input;
-    while(true) {
-        int numRead = lsp_request_read(worker_channel,(void*) &input);
-        if(numRead > 0) {
-            cout<<"!!! Let's Crack This Password !!!"<<endl;
-            cout<<"Input: "<<input<<endl;
-            request_hash = input.substr(0,40);
-            cout<<"Hash: "<<request_hash<<endl;
-            password_length = atoi((input.substr(46,input.length()-46)).c_str());
-            cout<<"Length: "<<password_length<<endl;
-            
-            //password_cracker(input);
-            password_cracker(password_length, start_char, stop_char);
-            // now that a password has been cracked, restart
-
-            // TODO worker will close when the server closes it:
-            // Write a function to handle a server closing the worker msg
-            send_join_request();
-        }
-    }
-    // ***********************************************************
-
-    // ***********************************************************
-    //wait_for_all_threads();
-    // Close the request client when done
-    //lsp_worker_close(worker_channel);
-    cout<<"Request client main completed successfully"<<endl;
-    usleep(1000000);
-    // ***********************************************************
+    */
 
     return 0;
 }

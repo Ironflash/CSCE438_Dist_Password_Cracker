@@ -60,7 +60,8 @@ void* readMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			printf("Dropping Packet\n");
+			//printf("Dropping Packet\n");
+			DEBUG_MSG("Dropping Packet");
 			continue;
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
@@ -266,8 +267,8 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent data message %s\n",message->m_payload.c_str());
-			DEBUG_MSG("ack most recent data message");
+			//printf("ack most recent data message %s\n",message->m_payload.c_str());
+			DEBUG_MSG("ack most recent data message"<<message->m_payload.c_str());
 			a_request->toOutbox(message);
 		}
 		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0)
@@ -290,8 +291,8 @@ void* epochTimer(void* arg)
 				{
 					a_request->dropServer();
 				}
-				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
-				DEBUG_MSG("resending unacknowledged message");
+				//printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged message "<<message->m_payload.c_str());
 				a_request->toOutbox(a_request->getMessageWaiting());
 			}
 		}

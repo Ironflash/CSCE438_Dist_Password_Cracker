@@ -117,7 +117,8 @@ void* readReqMessage(void* arg)
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
 		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
-			printf("Connection request detected from request\n");
+			//printf("Connection request detected from request\n");
+			DEBUG_MSG("Connection request detected from request");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
 			// if(a_srv->hasReqDisconnect())
@@ -224,7 +225,8 @@ void* readWorkMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			printf("Dropping Packet\n");
+			//printf("Dropping Packet\n");
+			DEBUG_MSG("Dropping Packet");
 			continue;
 		}
 		// Code to unmarshall a lsp_message ... still in progress 
@@ -271,7 +273,8 @@ void* readWorkMessage(void* arg)
 		/* check if this is a connection request */
 		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
-			printf("Connection request detected from worker\n");
+			//printf("Connection request detected from worker\n");
+			DEBUG_MSG("Connection request detected from worker");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
 			// if(a_srv->hasWorkDisconnect())
@@ -467,8 +470,8 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_srv->getMostRecentMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent data message %s\n",message->m_payload.c_str());
-			DEBUG_MSG("ack most recent data message");
+			//printf("ack most recent data message %s\n",message->m_payload.c_str());
+			DEBUG_MSG("ack most recent data message "<<message->m_payload.c_str());
 			a_srv->toOutbox(message);
 		}
 		//printf("two\n");
@@ -488,8 +491,8 @@ void* epochTimer(void* arg)
 				{
 					a_srv->dropClient(connid);
 				}
-				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
-				DEBUG_MSG("resending unacknowledged message");
+				//printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged message "<<message->m_payload.c_str());
 				a_srv->toOutbox(a_srv->getMessageWaiting());
 			}
 		}
