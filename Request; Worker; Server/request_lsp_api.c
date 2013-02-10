@@ -17,7 +17,7 @@
 
 using namespace std;
 
-#define DEBUG // uncomment to turn on print outs
+//#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
 #define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
 #else

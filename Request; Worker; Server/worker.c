@@ -22,8 +22,8 @@ using namespace std;
 /*--------------------------------------------------------------------------*/
 /* CONSTANTS/VARIABLES */
 /*--------------------------------------------------------------------------*/
-static int number_of_worker_threads;
 
+static int number_of_worker_threads;
 static pthread_t e_thread;
 static pthread_t *w_threads;
 
@@ -34,7 +34,7 @@ static struct lsp_request* worker_channel;
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
 
-void password_cracker(string hash) {
+void password_cracker(string hash, int length) {
     // write the algorithm for password cracking
     // for loop - iterate from a-z, aa-zz, .. aaaaaa - zzzzzz
     // password found
@@ -286,12 +286,13 @@ int main(int argc, char **argv) {
     // ***********************************************************
     // Initialize Worker Loop
     string input;
+    int password_length = 4;
     while(true) {
         int numRead = lsp_request_read(worker_channel,(void*) &input);
         if(numRead > 0) {
             cout<<"!!! Let's Crack This Password !!!"<<endl;
             cout<<"Password: "<<input<<endl;
-            password_cracker(input);
+            password_cracker(input, password_length);
             // now that a password has been cracked, restart
 
             // TODO worker will close when the server closes it:
