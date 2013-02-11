@@ -36,6 +36,7 @@ using namespace std;
 /*--------------------------------------------------------------------------*/
 
 static string request_hash;
+static bool last = false;
 
 static int number_of_worker_threads;
 static pthread_t *w_threads;
@@ -163,14 +164,14 @@ void password_cracker(int length, int start, int stop) {
 
     int *index;
     index = new int[number_of_worker_threads+1];
-    index[0] = 0;
+    index[0] = start;
 
-    int breakdown = 26/number_of_worker_threads;
+    int breakdown = (stop+1-start)/number_of_worker_threads;
     int high = breakdown*number_of_worker_threads;
     for (int i = 1; i<(number_of_worker_threads+1); i++){
         index[i] = index[i-1]+breakdown;
     }
-    int full = 26-high;
+    int full = (stop+1-start)-high;
     if (full > 0) {
         int temp;
         for (int i = 0; i<full; i++){
@@ -205,10 +206,17 @@ void password_cracker(int length, int start, int stop) {
     } else {
         cout<<"**************ALL THAT FOR NOTHING?!**************"<<endl;
         cout<<"Hash : "<<request_hash<<endl;
-        answer = "Not found";
+        if (last == true) {
+            answer = "Not Found5";
+        } else {
+            answer = "Not Found";
+        }
     }
     //lsp_request_write(worker_channel,result,result.length()); //UDP-LSP
     lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
+    last = false;
+    answer = "";
+    stop_searching = false;
 }
 
 /*
@@ -298,8 +306,8 @@ int main(int argc, char **argv) {
 
     send_join_request();
 
-    int start_char = 0;
-    int stop_char = 25;
+    int start_char;
+    int stop_char;
     int password_length;
 
     // ***********************************************************
@@ -312,9 +320,29 @@ int main(int argc, char **argv) {
             cout<<"Input: "<<input<<endl;
             request_hash = input.substr(0,40);
             cout<<"Hash: "<<request_hash<<endl;
+            string worker_position = input.substr(input.length()-1, input.length());
+            cout <<"worker_position = "<<worker_position<<endl;
+            input = input.substr(0,input.length()-1);
             password_length = atoi((input.substr(46,input.length()-46)).c_str());
             cout<<"Length: "<<password_length<<endl;
-            
+            if (worker_position == "1") {
+                start_char = 0;
+                stop_char = 8;
+            } else if (worker_position == "2") {
+                start_char = 8;
+                stop_char = 16;
+            } else if (worker_position == "3") {
+                start_char = 16;
+                stop_char = 25;
+                last = true;
+            } else if (worker_position == "4") {
+                start_char = 15;
+                stop_char = 20;
+            } else if (worker_position == "5") {
+                start_char = 20;
+                stop_char = 25;
+                last = true;
+            } 
             //password_cracker(input);
             password_cracker(password_length, start_char, stop_char);
             // now that a password has been cracked, restart

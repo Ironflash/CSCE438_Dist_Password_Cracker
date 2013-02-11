@@ -43,18 +43,21 @@ static int total_received_requests = 0;
 static int requests_being_processed = 0;
 static int number_available_workers = 0;
 static int workers_processing_requests = 0;
+static int pop_tracker = 0;
+static string worker_number[10] = {"1","2","3","4","5","6","7","8","9","10"};
+
 
 // Print Debugging:
 static int state_tracker = 0;
 bool print_out = true;
 
 pthread_mutex_t print_status_lock;
+pthread_mutex_t pop_lock;
 
 /*--------------------------------------------------------------------------*/
 /* FORWARDS */
 /*--------------------------------------------------------------------------*/
 
-//void handle_process_loop(int * _fd);
 void print_server_status(bool print_out);
 
 /*--------------------------------------------------------------------------*/
@@ -62,9 +65,7 @@ void print_server_status(bool print_out);
 /*--------------------------------------------------------------------------*/
 
 void * get_available_worker(void * args) {
-//void get_available_worker(string request) {
 	string * request = (string *) args;
-
 	DEBUG_MSG("Give this to the next available worker: "<<*request);
 	for (;;) {
 		if (number_available_workers > 0) {
@@ -73,19 +74,26 @@ void * get_available_worker(void * args) {
 			DEBUG_MSG("worker fd to pop = "<<worker_id);
 			workers.pop();
 			number_available_workers = workers.size();
+
+			pthread_mutex_lock(&pop_lock);
+			pop_tracker++;
+			if (pop_tracker == 4) {
+				pop_tracker = 0;
+				break;
+			}
+			string part = worker_number[pop_tracker-1];
+			pthread_mutex_unlock(&pop_lock);
+
 			workers_processing_requests++;
 			print_server_status(print_out);
-
-			lsp_server_write(server_channel,*request,0,worker_id);
-			break;
+			lsp_server_write(server_channel,(*request+part),0,worker_id);
 		}
 	}
 	pthread_exit(NULL);
 }
 
 void process_request_udp(uint32_t client_id, string * message){
-	//From requester or worker?
-	// if ((*message).length() == 40) { // From requester
+
 	if (client_id % 2 == 1) {
 		DEBUG_MSG("******REQUESTER******");
 		requesters.push(client_id);
@@ -93,26 +101,41 @@ void process_request_udp(uint32_t client_id, string * message){
 		print_server_status(print_out);
 		DEBUG_MSG("Send request to worker");
 		pthread_t thread_id;
-  		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);  		
+  		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
 	} else if ((*message) == "join") {
 		DEBUG_MSG("******WORKER******");
 		workers.push(client_id);
 		DEBUG_MSG("pushing worker (address): "<<client_id);
 		number_available_workers = workers.size();
 		print_server_status(print_out);
-	} else if ( ((*message).compare(0, 6, "Found:") == 0) || 
-				((*message).compare(0, 9, "Not Found") == 0) ) {
+	} else if ( ((*message).compare(0, 6, "Found:") == 0) ||
+				((*message).compare(0, 10, "Not Found5") == 0) ) {
 		DEBUG_MSG("******WORKER******");
 		DEBUG_MSG("return password to requester");
 		uint32_t requester_id = requesters.front();
 		DEBUG_MSG("requester fd to pop = "<<requester_id);
-		//socket_write(request, _fd);
+
+		pthread_mutex_lock(&pop_lock);
+		pop_tracker = 0;
+		pthread_mutex_unlock(&pop_lock);
+
 		requesters.pop();
 		requests_being_processed--;
 		workers_processing_requests--;
 		print_server_status(print_out);
 		lsp_server_write(server_channel,*message,0,requester_id);
 		DEBUG_MSG("******Finished sending to requester******");
+	} else if ( ((*message).compare(0, 9, "Not Found") == 0) ) {
+		DEBUG_MSG("******WORKER******");
+		DEBUG_MSG("return password to requester");
+		uint32_t requester_id = requesters.front();
+		DEBUG_MSG("requester fd to pop = "<<requester_id);
+
+		cout<<"NOT FOUND"<<endl;
+		workers_processing_requests--;
+		print_server_status(print_out);
+		DEBUG_MSG("******Finished sending to requester******");
+		//*/
 	} else {
 
 	}
@@ -167,7 +190,6 @@ void print_server_status(bool print_out_bool){
 	}
 }
 
-
 /*--------------------------------------------------------------------------*/
 /* MAIN FUNCTION */
 /*--------------------------------------------------------------------------*/
@@ -213,9 +235,7 @@ int main(int argc, char **argv) {
 
     string input;
     uint32_t fake_id = 0;
-    //uint32_t send_response_to;
 	int num_read;
-	//int answer_length = 4;
 	print_server_status(print_out);
 	while(true) {
 		//cout<<"!!!!!!!!!!!!! Attempting to read !!!!!!!!!!!!!"<<endl;
@@ -231,17 +251,7 @@ int main(int argc, char **argv) {
 	}
 	//*/
 	cout<<"EXIT WHILE loop =) "<<endl;
-	//lsp_server_write(server_channel, void* pld, int lth, uint32_t conn_id);
-	//bool lsp_server_write(lsp_server* a_srv, void* pld, int lth, uint32_t conn_id);
-    /*
-    string input;
-	uint32_t fake_id = 0;
-	// int num_read = lsp_server_read(serv,(void*) &input, &fake_id);
-	int num_read;
-	//*/
 	
-	//handle_process_loop();
-
 	// ***********************************************************
 
 	// Close the server when done

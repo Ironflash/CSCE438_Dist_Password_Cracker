@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 
     // "test" = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
 
-    string test = "te";
+    string test = "zz";
     string test_string = run_sha1sum(test.c_str());
 
     //string request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
