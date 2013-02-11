@@ -214,6 +214,7 @@ void password_cracker(int length, int start, int stop) {
     }
     //lsp_request_write(worker_channel,result,result.length()); //UDP-LSP
     lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
+    request_hash = "";
     last = false;
     answer = "";
     stop_searching = false;

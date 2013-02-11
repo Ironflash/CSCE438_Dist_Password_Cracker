@@ -39,6 +39,7 @@ struct lsp_server* server_channel;
 const int MAX_MESSAGE = 255;
 queue<uint32_t> requesters;
 queue<uint32_t> workers;
+queue<string> message_queue;
 static int total_received_requests = 0;
 static int requests_being_processed = 0;
 static int number_available_workers = 0;
@@ -46,12 +47,13 @@ static int workers_processing_requests = 0;
 static int pop_tracker = 0;
 static string worker_number[10] = {"1","2","3","4","5","6","7","8","9","10"};
 
-
 // Print Debugging:
 static int state_tracker = 0;
 bool print_out = true;
 
 pthread_mutex_t print_status_lock;
+pthread_mutex_t workers_lock;
+pthread_mutex_t messages_lock;
 pthread_mutex_t pop_lock;
 
 /*--------------------------------------------------------------------------*/
@@ -66,27 +68,35 @@ void print_server_status(bool print_out);
 
 void * get_available_worker(void * args) {
 	string * request = (string *) args;
-	DEBUG_MSG("Give this to the next available worker: "<<*request);
+	//DEBUG_MSG("Give this to the next available worker: "<<*request);
 	for (;;) {
-		if (number_available_workers > 0) {
-			DEBUG_MSG("****Giving request ("<<*request<<") to worker # "<<workers.front());
+		if ( (number_available_workers > 0) && 
+			(message_queue.size() != 0) ) {
+			pthread_mutex_lock(&messages_lock);
+			string request_to_process = message_queue.front();
+			message_queue.pop();
+			pthread_mutex_unlock(&messages_lock);
+
+			pthread_mutex_lock(&workers_lock);
+			DEBUG_MSG("****Giving request ("<<request_to_process<<") to worker # "<<workers.front());
 			uint32_t worker_id = workers.front();
 			DEBUG_MSG("worker fd to pop = "<<worker_id);
 			workers.pop();
 			number_available_workers = workers.size();
+			pthread_mutex_unlock(&workers_lock);
 
 			pthread_mutex_lock(&pop_lock);
 			pop_tracker++;
+			// always split to 3 workers
 			if (pop_tracker == 4) {
-				pop_tracker = 0;
-				break;
+				pop_tracker = 1;
 			}
 			string part = worker_number[pop_tracker-1];
 			pthread_mutex_unlock(&pop_lock);
 
 			workers_processing_requests++;
 			print_server_status(print_out);
-			lsp_server_write(server_channel,(*request+part),0,worker_id);
+			lsp_server_write(server_channel,(request_to_process+part),0,worker_id);
 		}
 	}
 	pthread_exit(NULL);
@@ -98,14 +108,25 @@ void process_request_udp(uint32_t client_id, string * message){
 		DEBUG_MSG("******REQUESTER******");
 		requesters.push(client_id);
 		requests_being_processed++;
+
+		// push 3 messages for the next 3 workers to process
+		pthread_mutex_lock(&messages_lock);
+		for (int i=0; i<3; i++) {
+			message_queue.push(*message);
+		}
+		pthread_mutex_unlock(&messages_lock);
+
 		print_server_status(print_out);
-		DEBUG_MSG("Send request to worker");
-		pthread_t thread_id;
-  		pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
+		DEBUG_MSG("Sending request to worker");
+
+		//pthread_t thread_id;
+  		//pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
 	} else if ((*message) == "join") {
 		DEBUG_MSG("******WORKER******");
+		pthread_mutex_lock(&workers_lock);
 		workers.push(client_id);
 		DEBUG_MSG("pushing worker (address): "<<client_id);
+		pthread_mutex_unlock(&workers_lock);
 		number_available_workers = workers.size();
 		print_server_status(print_out);
 	} else if ( ((*message).compare(0, 6, "Found:") == 0) ||
@@ -237,6 +258,10 @@ int main(int argc, char **argv) {
     uint32_t fake_id = 0;
 	int num_read;
 	print_server_status(print_out);
+
+	pthread_t thread_id;
+  	pthread_create(& thread_id, NULL, get_available_worker, (void *)"temp");
+
 	while(true) {
 		//cout<<"!!!!!!!!!!!!! Attempting to read !!!!!!!!!!!!!"<<endl;
 		num_read = lsp_server_read(server_channel,(void*) &input, &fake_id);
@@ -253,7 +278,6 @@ int main(int argc, char **argv) {
 	cout<<"EXIT WHILE loop =) "<<endl;
 	
 	// ***********************************************************
-
 	// Close the server when done
 	// lsp_server_close(server_channel,1); // UDP-LSP 1 is just for testing needs to change
 	
