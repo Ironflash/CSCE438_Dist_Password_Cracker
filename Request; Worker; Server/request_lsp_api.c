@@ -25,6 +25,20 @@ using namespace std;
 #define DEBUG_MSG(str) do { } while ( false )
 #endif
 
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- SUPPORT FUNCTIONS */
+/*--------------------------------------------------------------------------*/
+
+string int2string(int number) {
+   stringstream ss; //create a stringstream
+   ss << number; //add number to the stream
+   return ss.str(); //return a string with the contents of the stream
+}
+
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- UDP Server Socket Creation*/
+/*--------------------------------------------------------------------------*/
+
 /* Reads a message from network */
 void* readMessage(void* arg) 
 {
@@ -174,49 +188,6 @@ void* readMessage(void* arg)
 	}
 }
 
-// void* writeMessageold(void* arg)
-// {
-// 	lsp_request* a_request = (lsp_request*) arg;
-// 	// Code to marshall a lsp_message
-// 	printf("Pld: %s\n",pld.c_str());
-// 	GOOGLE_PROTOBUF_VERIFY_VERSION;
-// 	lspMessage::LspMessage* msg = new lspMessage::LspMessage();
-// 	msg->set_connid(connid); 
-// 	msg->set_seqnum(seqnum); 
-// 	msg->set_payload(pld);
-
-// 	int size = msg->ByteSize(); 
-// 	printf("Byte Size: %d\n",size);
-// 	void *buffer = malloc(size);
-// 	if(!msg->SerializeToArray(buffer, size))
-// 	{
-// 		printf("serialize failed\n");
-// 		return false;
-// 	}
-// 	printf("Marshalled successfully\n");
-// 	// end of marshalling
-
-// 	printf("Attempting to send message\n");
-// 	printf("Size of pld: %d\n", sizeof(pld));
-// 	printf("size of msg: %d\n", sizeof(*msg));
-// 	printf("Socket: %d\n",a_request->getWriteSocket());
-
-// 	int sent;
-// 	//need to convert the string to a char* for sendto
-// 	if((sent = sendto(a_request->getWriteSocket(), buffer, size, 0, (struct sockaddr *)&a_request->getWriteAddr(), sizeof(a_request->getWriteAddr()))) < 0)
-// 	{
-// 		perror("Sendto failed");
-// 	   return false;
-// 	}
-// 	else
-// 	{
-// 		printf("Sent: %d bytes\n",sent);
-// 	}
-// 	// Free up memory that was allocated while marshalling
-// 	delete buffer;
-// 	delete msg;
-// }
-/* sends a message over the network*/
 void* writeMessage(void* arg)
 {
 	lsp_request* a_request = (lsp_request*) arg;
@@ -275,11 +246,6 @@ void* writeMessage(void* arg)
 		//printf("Client Id: %d\n",connid);
 		DEBUG_MSG("Client Id: "<<connid);
 		sockaddr_in servAddr = a_request->getServAddr();
-
-		// string ip = "127.0.0.1"; //temp
-		// sockaddr_in tempServ;
-		// tempServ.sin_addr.s_addr = inet_addr(ip.c_str());
-		// tempServ.sin_port = htons(1234);
 
 		/* end thread if flagged*/
 		if(a_request->shouldEndThreads())
@@ -372,103 +338,72 @@ void* epochTimer(void* arg)
 			}
 		}
 	}
-
-
 }
-// lsp_request* lsp_request_create_ip(const char* ip, int port);
-// // if called with a host name
-// lsp_request* lsp_request_create(const char* dest, int port)
-// {
-// 	struct hostent* host;
-// 	if((host = (struct hostent*) gethostbyname(dest))<0)
-// 	{
-// 		return NULL;		//server name couldn't be resolved
-// 	}
-// 	return lsp_request_create_ip( host->h_addr_list[0], port);
-
-// }
 
 // if called with an ip address
 lsp_request* lsp_request_create(const char* dest, int port)
 {
+	// convert int to const char
+	const char * port_number;
+	port_number = (int2string(port)).c_str();
+
+	// Map service name to port number
+  	struct servent * pse;
+  	pse = getservbyname(port_number, "udp");
+
 	lsp_request* newRequest = new lsp_request(); 
-	if(newRequest == NULL)
-	{
-		//printf("space allocation for request failed\n");
+	if(newRequest == NULL) {
 		DEBUG_MSG("space allocation for request failed");
 		delete newRequest;
 		return NULL;		//return NULL if memory could not be allocated
 	}
 	
 	struct hostent* host;
+	host = gethostbyname(dest);
 	if((host = (struct hostent*) gethostbyname(dest))<0)
 	{
 		return NULL;		//server name couldn't be resolved
 	}
-	 string ip = "127.0.0.1"; //temp
 
-	// /* create socket for reading */
-	// newRequest->setReadPort(1333); // this needs to be dynamic
-	// if((newRequest->setReadSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	// {
-	// 	printf("read socket creation failed\n");
-	// 	delete newRequest;
-	// 	return NULL; 		// return NULL on error
-	// }
-	// sockaddr_in tempCli;
-	// tempCli.sin_family = AF_INET;
-	// tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	// tempCli.sin_port = htons(1333); // should get from client
- //  	newRequest->setReadAddr(tempCli);
- //  	//Bind Socket
-	// if ( bind(newRequest->getReadSocket(),(struct sockaddr *) &(newRequest->getReadAddr()), sizeof(newRequest->getReadAddr())) < 0)
-	// {
-	// 	perror("bind failed on read\n");
-	// 	delete newRequest;
-	// 	return NULL;	//return false if socket could not be bound
-	// }
+	// create socket
+	//newRequest->setPort(port); // this needs to be dynamic
 
- //  	/* create socket for writing */
-	// newRequest->setWritePort(1322);
-	// if((newRequest->setWriteSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	// {
-	// 	printf("write socket creation failed\n");
-	// 	delete newRequest;
-	// 	return NULL; 		// return NULL on error
-	// }
-	// tempCli.sin_port = htons(1322);
- //  	newRequest->setWriteAddr(tempCli);
- //  	//Bind Socket
-	// if ( bind(newRequest->getWriteSocket(),(struct sockaddr *) &(newRequest->getWriteAddr()), sizeof(newRequest->getWriteAddr())) < 0)
-	// {
-	// 	perror("bind failed on write\n");
-	// 	delete newRequest;
-	// 	return NULL;	//return false if socket could not be bound
-	// }
-
-	/* create socket */
-	newRequest->setPort(1333); // this needs to be dynamic
-	if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	{
-		//printf("read socket creation failed\n");
-		DEBUG_MSG("read socket creation failed");
-		delete newRequest;
-		return NULL; 		// return NULL on error
-	}
+	// dynamic port creation:
+	int regenerate_port = 5000;
 	sockaddr_in tempCli;
-	tempCli.sin_family = AF_INET;
-	tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	tempCli.sin_port = htons(newRequest->getPort());
-  	newRequest->setAddr(tempCli);
-  	//Bind Socket
-	if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0)
-	{
-		perror("bind failed on read\n");
-		delete newRequest;
-		return NULL;	//return false if socket could not be bound
+	for (int i=0; i<30; i++) { //try 30 times
+		cout<<"try # "<<i<<endl;
+		newRequest->setPort(regenerate_port); // this needs to be dynamic
+		if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0) {
+			//printf("read socket creation failed\n");
+			DEBUG_MSG("read socket creation failed");
+			delete newRequest;
+			return NULL; 		// return NULL on error
+		}
+		
+		memset(&tempCli, 0, sizeof(tempCli)); // Zero out address
+		tempCli.sin_family = AF_INET;
+		//memcpy(&tempCli.sin_addr, host->h_addr, host->h_length);
+		tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
+		//tempCli.sin_port = pse->s_port;
+		tempCli.sin_port = htons(newRequest->getPort());
+	  	newRequest->setAddr(tempCli);
+	  	//Bind Socket
+		if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0) {
+			perror("bind failed on read\n");
+			delete newRequest;
+			regenerate_port++;
+			if (i == 29) {
+				return NULL;	//return false if socket could not be bound
+			}
+		} else {
+			break;
+		}
 	}
 
-  	/* create Serv address */
+	string ip = "127.0.0.1"; //temp
+
+  	// create Serv address
   	struct sockaddr_in tempServ;
   	// tempServ.sin_family = AF_INET;
   	// tempServ.sin_addr.s_addr = inet_addr(host->h_addr); // uncomment for use on multiple machines
