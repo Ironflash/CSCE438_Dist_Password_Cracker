@@ -19,8 +19,17 @@
 #include <vector>
 #include <assert.h>
 #include <sys/time.h>
-
 #include "worker_lsp_api.c"
+
+using namespace std;
+
+#if defined(__APPLE__) && defined(__MACH__)
+    #include <CommonCrypto/CommonDigest.h>
+    #define SHA1 CC_SHA1
+    #define SHA_DIGEST_LENGTH 20
+#else
+    #include <openssl/sha.h>
+#endif
 
 //#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
@@ -28,8 +37,6 @@
 #else
 #define DEBUG_MSG(str) do { } while ( false )
 #endif
-
-using namespace std;
 
 /*--------------------------------------------------------------------------*/
 /* CONSTANTS/VARIABLES */
@@ -90,7 +97,27 @@ void update_indices(int pos, int int_array[], int limit) {
     }
 }
 
-string run_sha1sum(const char * possible_password){
+string run_sha1sum(string possible_password){
+    
+    char * s1 = (char*)possible_password.c_str();
+
+    unsigned char temp[SHA_DIGEST_LENGTH];
+    char buf[SHA_DIGEST_LENGTH*2];
+ 
+    memset(buf, 0x0, SHA_DIGEST_LENGTH*2);
+    memset(temp, 0x0, SHA_DIGEST_LENGTH);
+
+    char * data[] = { s1 };
+
+    SHA1((unsigned char *)data[0], strlen(data[0]), temp);
+
+    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        sprintf((char*)&(buf[i*2]), "%02x", temp[i]);
+    }
+
+    string s = buf;
+    //*/
+    /*
     const char * system_call_a = "echo -n ";
     const char * system_call_b = " | shasum | awk '{print $1}'";
     char system_call[100];
@@ -105,7 +132,7 @@ string run_sha1sum(const char * possible_password){
     for (size_t count; (count = fread(buf, 1, sizeof(buf), p));)
         s += string(buf, buf + count);
     pclose(p);
-
+    //*/
     return s.substr(0,40);
 }
 
@@ -128,7 +155,7 @@ void *cracker_minion(void * args) {
         last_password+=alphabet[stop];
     }
     DEBUG_MSG("Thread ID ["<<pthread_self()<<"]: "<<start_password);
-    string result = run_sha1sum(start_password.c_str());
+    string result = run_sha1sum(start_password);
     if (result == request_hash.substr(0,40)) {
         stop_searching = true;
         answer = start_password;
@@ -140,7 +167,7 @@ void *cracker_minion(void * args) {
                 start_password+=alphabet[index[j]];
             }
             DEBUG_MSG("Thread ID ["<<pthread_self()<<"]: "<<start_password);
-            result = run_sha1sum(start_password.c_str());
+            result = run_sha1sum(start_password);
             if (result == request_hash.substr(0,40)) {
                 stop_searching = true;
                 answer = start_password;
@@ -350,5 +377,6 @@ int main(int argc, char **argv) {
     usleep(1000000);
     // ***********************************************************
 
+    //*/
     return 0;
 }
