@@ -14,6 +14,8 @@
 /*--------------------------------------------------------------------------*/
 
 #include <iostream>
+#include <assert.h>
+#include <sys/time.h>
 #include "request_lsp_api.c"
 
 using namespace std;
@@ -40,11 +42,42 @@ static struct lsp_request* request_channel;
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
 
+void print_time_diff(struct timeval * tp1, struct timeval * tp2) {
+    /* Prints to stdout the difference, in seconds and museconds, between two
+    timevals. */
+    long sec = tp2->tv_sec - tp1->tv_sec;
+    long musec = tp2->tv_usec - tp1->tv_usec;
+    if (musec < 0) {
+        musec += 1000000;
+        sec--;
+    }
+    cout<<" [sec = "<<sec<<", musec = "<<musec<<"] "<<endl;
+}
+
 void clean_exit(){
     cout<<"Closing Request Channel..."<<endl;
     lsp_request_close(request_channel); // UDP-LSP
     cout<<"Request client main completed successfully"<<endl;
     usleep(1000000);
+}
+
+string run_sha1sum(const char * possible_password){
+    const char * system_call_a = "echo -n ";
+    const char * system_call_b = " | shasum | awk '{print $1}'";
+    char system_call[100];
+    strcpy(system_call, system_call_a);
+    strcat(system_call, possible_password);
+    strcat(system_call, system_call_b);
+    
+    //Run System Call and extract result from stdout
+    char buf [256];
+    FILE *p = popen(system_call, "r");
+    string s;
+    for (size_t count; (count = fread(buf, 1, sizeof(buf), p));)
+        s += string(buf, buf + count);
+    pclose(p);
+
+    return s.substr(0,40);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -57,8 +90,14 @@ int main(int argc, char **argv) {
     unsigned short port_number = 1234;
 
     // "test" = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
-    string request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
-    int msg_length = 4;
+
+    string test = "zz";
+    string test_string = run_sha1sum(test.c_str());
+
+    //string request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
+    string request_msg = test_string;
+    //request_msg = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
+    int msg_length = test.length();
 
     // ***********************************************************
     // getopt code
@@ -121,6 +160,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // ***********************************************************
+    // Timer for performance metrics; Used to compute elapsed time.
+    struct timeval tp_start;
+    struct timeval tp_end;
+    assert(gettimeofday(&tp_start, 0) == 0);
+    // ***********************************************************
+
     lsp_request_write(request_channel,request_msg,msg_length);
 
     // ***********************************************************
@@ -133,17 +179,26 @@ int main(int argc, char **argv) {
             // TODO: design a nice and clean output for both cases
             // cout Password cracked only when the returned input
             // was "Found: ..."
-            cout<<"!!!!!! Password cracked !!!!!!"<<endl;
+            if (input.substr(0,6) == "Found:") {
+                cout<<"!!!!!! Password cracked !!!!!!"<<endl;
+            }
             cout<<input<<endl;
             cracked = true;
         }
     }
+
+    // ***********************************************************
+    // Timer for performance metrics; Used to compute elapsed time.
+    assert(gettimeofday(&tp_end, 0) == 0);
+    printf("Time taken for computation : "); 
+    print_time_diff(&tp_start, &tp_end);
     // ***********************************************************
 
-	// ***********************************************************
+    // ***********************************************************
     // Close the request client when done
     clean_exit();
     // ***********************************************************
 
+    //*/
     return 0;
 }

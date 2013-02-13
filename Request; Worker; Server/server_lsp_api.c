@@ -827,8 +827,7 @@ lsp_server* lsp_server_create(int port)
 	sockaddr_in tempServ;
 	tempServ.sin_family = AF_INET;
 	tempServ.sin_addr.s_addr = htonl(INADDR_ANY);
-	// tempServ.sin_port = htons(1234);	// should get from server
-	tempServ.sin_port = htons(port);
+	tempServ.sin_port = htons(1234);	// should get from server
 	newServer->setReqAddr(tempServ);
 
 	//Bind Socket
@@ -848,8 +847,7 @@ lsp_server* lsp_server_create(int port)
 		delete newServer;
 		return NULL; // return Null on error
 	}
-	// tempServ.sin_port = htons(1235);	// should get from server
-	tempServ.sin_port = htons(port+1);	// should get from server
+	tempServ.sin_port = htons(1235);	// should get from server
 	newServer->setWorkAddr(tempServ);
 
 	//Bind Socket

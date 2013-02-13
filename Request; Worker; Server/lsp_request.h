@@ -71,6 +71,7 @@ public:
 		m_socket = socket;
 		if(m_socket < 0)
 		{
+			//printf("socket creation error\n");
 			DEBUG_MSG("socket creation error");
 		}
 		return m_socket;
@@ -98,8 +99,10 @@ public:
 
 	void toInbox(lsp_message* message)
 	{
+		//printf("Attempting to add to inbox\n");
 		DEBUG_MSG("Attempting to add to inbox");
 		m_inbox.push(message);
+		//printf("Added to inbox\n");
 		DEBUG_MSG("Added to inbox");
 	}
 
@@ -112,6 +115,7 @@ public:
 
 	void toWaitbox(lsp_message* message)
 	{
+		//printf("Attempting to add to inbox\n");
 		DEBUG_MSG("Attempting to add to inbox");
 		m_waitbox.push(message);
 	}
@@ -221,7 +225,7 @@ public:
 		{
 			return NULL;
 		}
-		DEBUG_MSG("Request Outbox size: "<<(int)m_ackbox.size());
+		printf("Request Outbox size: %d",(int)m_outbox.size());
 		lsp_message* result = m_outbox.front();
 		m_outbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
@@ -236,7 +240,7 @@ public:
 		{
 			return NULL;
 		}
-		DEBUG_MSG("Request Outbox size: "<<(int)m_ackbox.size());
+		printf("Request Outbox size: %d",(int)m_ackbox.size());
 		lsp_message* result = m_ackbox.front();
 		m_ackbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
@@ -255,13 +259,16 @@ public:
 		/* if message Waiting is null then it isn't an acknowledgement */
 		if(m_messageWaiting == NULL)
 		{
+			//printf("Reached inner\n");
 			DEBUG_MSG("Reached inner");
 			pthread_mutex_unlock(&m_waitingMessageLock);
 			return;
 		}
+		//printf("Message Waiting id: %d\n",m_messageWaiting->m_connid);
 		DEBUG_MSG("Message Waiting id: "<<m_messageWaiting->m_connid);
 		m_messageAcknowledged = (m_messageWaiting->m_connid == connid && m_messageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingMessageLock);
+		//printf("Reached 2\n");
 		DEBUG_MSG("Reached 2");
 		return;
 	}

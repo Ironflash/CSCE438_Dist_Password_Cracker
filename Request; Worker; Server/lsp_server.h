@@ -195,9 +195,10 @@ public:
 	void toReqOutbox(lsp_message* message)
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-		DEBUG_MSG("to outbox connid: "<<message->m_connid);
+		// printf("Req Outbox size before: %d\n",m_reqOutbox.size());
+		printf("to outbox connid: %d\n",message->m_connid);
 		m_reqOutbox.push(message);
-		DEBUG_MSG("Req Outbox size after: "<<(int)m_reqOutbox.size());
+		printf("Req Outbox size after: %d\n",(int)m_reqOutbox.size());
 		// pthread_mutex_unlock(&m_outboxLock);
 	}
 
@@ -221,7 +222,7 @@ public:
 	void toWorkAckbox(lsp_message* message)
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-		DEBUG_MSG("Req Outbox size before: "<<m_reqOutbox.size());
+		// printf("Req Outbox size before: %d\n",m_reqOutbox.size());
 		m_workAckbox.push(message);
 		// pthread_mutex_unlock(&m_outboxLock);
 	}
@@ -324,18 +325,22 @@ public:
 	sockaddr_in* getCliAddr(uint32_t connid) 
 	{
 		pthread_mutex_lock(&m_cliConnectionsLock);
+		//printf("num cli: %d\n",(int)m_cliConnections.size());
 		DEBUG_MSG("num cli: "<<(int)m_cliConnections.size());
 		if(m_cliConnections.empty())
 		{
+			//printf("cliAddresses empty\n");
 			DEBUG_MSG("cliAddresses empty");
 			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return NULL;
 		}
 		else
 		{
+			//printf("cliAddresses not empty\n");
 			DEBUG_MSG("cliAddresses not empty");
 		}
 		// client no longer exists
+		//printf("num of clients with address %d: %d",connid,(int)m_cliConnections.count(connid));
 		DEBUG_MSG("num of clients with address "<<connid": "<<(int)m_cliConnections.count(connid));
 		if(m_cliConnections.count(connid) == 0)
 		{
@@ -574,6 +579,7 @@ public:
 		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) > 0)
 		{
+			//printf("removeing addr\n");
 			DEBUG_MSG("removing addr");
 			std::map<uint32_t, clientConnection>::iterator it = m_cliConnections.find(connid);
 			m_cliConnections.erase(it);
@@ -602,10 +608,11 @@ public:
 			pthread_mutex_unlock(&m_waitingReqMessageLock);
 			return;
 		}
-		DEBUG_MSG("Message Waiting id: "<<m_reqMessageWaiting->m_connid);
-		DEBUG_MSG("Connid: "<<connid);
+		printf("Message Waiting id: %d\n",m_reqMessageWaiting->m_connid);
+		printf("Connid: %d\n",connid);
 		m_reqMessageAcknowledged = (m_reqMessageWaiting->m_connid == connid && m_reqMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingReqMessageLock);
+		// printf("Reached 2\n");
 		return;
 	}
 
@@ -618,10 +625,11 @@ public:
 			pthread_mutex_unlock(&m_waitingWorkMessageLock);
 			return;
 		}
-		DEBUG_MSG("Message Waiting id: "<<m_workMessageWaiting->m_connid);
-		DEBUG_MSG("Connid: "<<connid);
+		printf("Message Waiting id: %d\n",m_workMessageWaiting->m_connid);
+		printf("Connid: %d\n",connid);
 		m_workMessageAcknowledged = (m_workMessageWaiting->m_connid == connid && m_workMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingWorkMessageLock);
+		// printf("Reached 2\n");
 		return;
 	}
 
@@ -705,6 +713,7 @@ public:
 		//if the connection id is even and therefore a worker
 		if(connid % 2 == 0)
 		{
+			//printf("dropping worker\n");
 			DEBUG_MSG("dropping worker");
 			//add to list of disconnected workers
 			m_workerDisconnects.push_back(connid);
@@ -722,6 +731,7 @@ public:
 		}
 		else	// the connection id is for a request
 		{
+			//printf("dropping request\n");
 			DEBUG_MSG("dropping request");
 			//add to list of disconnected workers
 			m_requestDisconnects.push_back(connid);
@@ -778,6 +788,7 @@ public:
 	void receivedKeepAlive(uint32_t connid)
 	{
 		//reset num no keep alive 
+		//printf("num keep alive reset\n");
 		pthread_mutex_lock(&m_cliConnectionsLock);
 		DEBUG_MSG("num keep alive reset");
 		m_cliConnections[connid].numNoKeepAlive = 0;
