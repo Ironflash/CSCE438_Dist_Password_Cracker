@@ -75,6 +75,7 @@ private:
 	pthread_mutex_t m_cliConnectionsLock;
 	pthread_mutex_t m_reqRWLock;
 	pthread_mutex_t m_workRWLock;
+	pthread_mutex_t m_dropLock;
 	lsp_message* m_reqMessageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_workMessageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_mostRecentReqMessage;
@@ -109,6 +110,7 @@ public:
 		pthread_mutex_init(&m_cliConnectionsLock, NULL);
 		pthread_mutex_init(&m_reqRWLock, NULL);
 		pthread_mutex_init(&m_workRWLock, NULL);
+		pthread_mutex_init(&m_dropLock, NULL);
 	}
 	~lsp_server()
 	{
@@ -120,6 +122,7 @@ public:
 		pthread_mutex_destroy(&m_cliConnectionsLock);
 		pthread_mutex_destroy(&m_reqRWLock);
 		pthread_mutex_destroy(&m_workRWLock);
+		pthread_mutex_destroy(&m_dropLock);
 	}
 	/* setters */
 	void setReqPort(int port)
@@ -608,7 +611,7 @@ public:
 			pthread_mutex_unlock(&m_waitingReqMessageLock);
 			return;
 		}
-		DEBUG_MSG("Message Waiting id: "<<m_reqMessageWaiting->m_connid);
+		DEBUG_MSG("Req Message Waiting id: "<<m_reqMessageWaiting->m_connid);
 		DEBUG_MSG("Connid: "<<connid);
 		m_reqMessageAcknowledged = (m_reqMessageWaiting->m_connid == connid && m_reqMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingReqMessageLock);
@@ -625,7 +628,7 @@ public:
 			pthread_mutex_unlock(&m_waitingWorkMessageLock);
 			return;
 		}
-		DEBUG_MSG("Message Waiting id: "<<m_workMessageWaiting->m_connid);
+		DEBUG_MSG("Work Message Waiting id: "<<m_workMessageWaiting->m_connid);
 		DEBUG_MSG("Connid: "<<connid);
 		m_workMessageAcknowledged = (m_workMessageWaiting->m_connid == connid && m_workMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingWorkMessageLock);
@@ -709,8 +712,10 @@ public:
 	void dropClient(uint32_t connid)
 	{
 		/* remove the cli from the list of clients */
+		pthread_mutex_lock(&m_dropLock);
 		removeCliAddr(connid);
 		//if the connection id is even and therefore a worker
+
 		if(connid % 2 == 0)
 		{
 			//printf("dropping worker\n");
@@ -747,7 +752,7 @@ public:
 			//required so that the server will go on and not wait for a reply
 			m_workMessageAcknowledged = true;
 		}
-		
+		pthread_mutex_unlock(&m_dropLock);
 	}
 
 	bool dataSentTo(uint32_t connid)
