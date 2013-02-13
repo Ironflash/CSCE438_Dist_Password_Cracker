@@ -13,7 +13,7 @@
 #include "lsp_request.h"
 #include "lspMessage.pb.h" 
 
-//#define DEBUG // uncomment to turn on print outs
+#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
 #define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
 #else
@@ -21,6 +21,8 @@
 #endif
 
 using namespace std;
+
+bool sentAck = false;
 
 /* Reads a message from network */
 void* readMessage(void* arg) 
@@ -60,8 +62,7 @@ void* readMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			//printf("Dropping Packet\n");
-			DEBUG_MSG("Dropping Packet");
+			printf("Dropping Packet\n");
 			continue;
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
@@ -122,7 +123,7 @@ void* readMessage(void* arg)
 		{
 			//ignore message ... should probably send back an error
 		}
-		else // is a normal message
+		else if(payload != "")// is a normal message
 		{
 			/* check if message is a duplicate or out of order*/
 			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
@@ -137,6 +138,7 @@ void* readMessage(void* arg)
 			
 			// update the last sequnce number from server
 			a_request->increaseLastSeqnum();
+			printf("increased seqnum\n");
 
 			/* keep track of most recently received data message */
 			a_request->setMostRecentMessage(new lsp_message(connid,seqnum,""));	
@@ -149,7 +151,7 @@ void* readMessage(void* arg)
 			/* add ACK to outbox */
 			//printf("Sending ack message to outbox with id: %d\n",connid);
 			DEBUG_MSG("Sending ack message to outbox with id: "<<connid);
-			a_request->toOutbox(new lsp_message(connid,seqnum,""));	
+			a_request->toAckbox(new lsp_message(connid,seqnum,""));	
 
 		}	
 		//printf("END OF READ\n");
@@ -165,17 +167,57 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
+		lsp_message* message;
 		/* Check for if last message has reveived ACK if not DO NOT get another message */
 		if(!a_request->messageAcknowledged())
 		{
-			continue;
+			/* get an ack to send */
+			message = a_request->fromAckbox();
+			if(message == NULL)
+			{
+				continue;
+			}	
+			sentAck = true;
+			printf("Writing ack\n");
+		}
+		else 
+		{
+			if(!sentAck)
+			{
+				/* get an ack to send */
+				message = a_request->fromAckbox();
+				if(message == NULL)
+				{
+					message = a_request->fromOutbox();
+					if(message == NULL)
+					{
+						continue;
+					}	
+				}	
+				sentAck = true;
+				printf("Writing ack\n");
+			}
+			else 
+			{
+				message = a_request->fromOutbox();
+				if(message == NULL)
+				{
+					message = a_request->fromAckbox();
+					if(message == NULL)
+					{
+						continue;
+					}
+				}
+				sentAck = false;
+				printf("Writing message\n");
+			}
 		}
 		/* get values from the message */
-		lsp_message* message = a_request->fromOutbox();
-		if(message == NULL)
-		{
-			continue;	// TO-DO this needs to probably be adjusted
-		}
+		// lsp_message* message = a_request->fromOutbox();
+		// if(message == NULL)
+		// {
+		// 	continue;	// TO-DO this needs to probably be adjusted
+		// }
 		string pld = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 		uint32_t connid = message->m_connid;
 		uint32_t seqnum = message->m_seqnum;
@@ -213,6 +255,8 @@ void* writeMessage(void* arg)
 		int sent;
 		//printf("Client Id: %d\n",connid);
 		DEBUG_MSG("Client Id: "<<connid);
+		DEBUG_MSG("Seqnum: "<<seqnum);
+		DEBUG_MSG("Payload: "<<pld);
 		sockaddr_in servAddr = a_request->getServAddr();
 
 		// string ip = "127.0.0.1"; //temp
@@ -261,21 +305,21 @@ void* epochTimer(void* arg)
 		{
 			//printf("resending connection request\n");
 			DEBUG_MSG("resending connection request");
-			a_request->toOutbox(new lsp_message(0,0,""));
+			a_request->toAckbox(new lsp_message(0,0,""));
 		}
 		/*Send an acknowledgment message for the most recently received data message, or an acknowledgment with sequence number 0 if no data messages have been received*/
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			//printf("ack most recent data message %s\n",message->m_payload.c_str());
-			DEBUG_MSG("ack most recent data message"<<message->m_payload.c_str());
-			a_request->toOutbox(message);
+			printf("ack most recent data message %s\n",message->m_payload.c_str());
+			// DEBUG_MSG("ack most recent data message");
+			a_request->toAckbox(message);
 		}
 		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0)
  		{
  			//printf("sending keep alive signal\n");
  			DEBUG_MSG("sending keep alive signal");
- 			a_request->toOutbox(new lsp_message(a_request->getConnid(),0,""));
+ 			a_request->toAckbox(new lsp_message(a_request->getConnid(),0,""));
 		}
 		/*If a data message has been sent, but not yet acknowledged, then resend the data message */
 		if(!a_request->messageAcknowledged())
@@ -291,14 +335,29 @@ void* epochTimer(void* arg)
 				{
 					a_request->dropServer();
 				}
-				//printf("resending unacknowledged message %s\n",message->m_payload.c_str());
-				DEBUG_MSG("resending unacknowledged message "<<message->m_payload.c_str());
-				a_request->toOutbox(a_request->getMessageWaiting());
+				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				// DEBUG_MSG("resending unacknowledged message");
+				a_request->toAckbox(a_request->getMessageWaiting());
 			}
 		}
 	}
-}
 
+
+}
+// lsp_request* lsp_request_create_ip(const char* ip, int port);
+// // if called with a host name
+// lsp_request* lsp_request_create(const char* dest, int port)
+// {
+// 	struct hostent* host;
+// 	if((host = (struct hostent*) gethostbyname(dest))<0)
+// 	{
+// 		return NULL;		//server name couldn't be resolved
+// 	}
+// 	return lsp_request_create_ip( host->h_addr_list[0], port);
+
+// }
+
+// if called with an ip address
 lsp_request* lsp_request_create(const char* dest, int port)
 {
 	lsp_request* newRequest = new lsp_request(); 
@@ -315,47 +374,70 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	{
 		return NULL;		//server name couldn't be resolved
 	}
+	 string ip = "127.0.0.1"; //temp
 
-	// create socket
-	//newRequest->setPort(1334); // this needs to be dynamic
+	// /* create socket for reading */
+	// newRequest->setReadPort(1333); // this needs to be dynamic
+	// if((newRequest->setReadSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
+	// {
+	// 	printf("read socket creation failed\n");
+	// 	delete newRequest;
+	// 	return NULL; 		// return NULL on error
+	// }
+	// sockaddr_in tempCli;
+	// tempCli.sin_family = AF_INET;
+	// tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
+	// tempCli.sin_port = htons(1333); // should get from client
+ //  	newRequest->setReadAddr(tempCli);
+ //  	//Bind Socket
+	// if ( bind(newRequest->getReadSocket(),(struct sockaddr *) &(newRequest->getReadAddr()), sizeof(newRequest->getReadAddr())) < 0)
+	// {
+	// 	perror("bind failed on read\n");
+	// 	delete newRequest;
+	// 	return NULL;	//return false if socket could not be bound
+	// }
 
-	// dynamic port creation:
-	int regenerate_port = 6000;
+ //  	/* create socket for writing */
+	// newRequest->setWritePort(1322);
+	// if((newRequest->setWriteSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
+	// {
+	// 	printf("write socket creation failed\n");
+	// 	delete newRequest;
+	// 	return NULL; 		// return NULL on error
+	// }
+	// tempCli.sin_port = htons(1322);
+ //  	newRequest->setWriteAddr(tempCli);
+ //  	//Bind Socket
+	// if ( bind(newRequest->getWriteSocket(),(struct sockaddr *) &(newRequest->getWriteAddr()), sizeof(newRequest->getWriteAddr())) < 0)
+	// {
+	// 	perror("bind failed on write\n");
+	// 	delete newRequest;
+	// 	return NULL;	//return false if socket could not be bound
+	// }
+
+	/* create socket */
+	newRequest->setPort(1334); // this needs to be dynamic
+	if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
+	{
+		//printf("read socket creation failed\n");
+		DEBUG_MSG("read socket creation failed");
+		delete newRequest;
+		return NULL; 		// return NULL on error
+	}
 	sockaddr_in tempCli;
-	memset(&tempCli, 0, sizeof(tempCli)); // Zero out address
 	tempCli.sin_family = AF_INET;
-	//memcpy(&tempCli.sin_addr, host->h_addr, host->h_length);
 	tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	//tempCli.sin_port = pse->s_port;
-		
-	for (int i=0; i<30; i++) { //try 30 times
-		DEBUG_MSG("try # "<<i);
-		newRequest->setPort(regenerate_port); // this needs to be dynamic
-		if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0) {
-			DEBUG_MSG("read socket creation failed");
-			delete newRequest;
-			return NULL; 		// return NULL on error
-		}
-		
-		tempCli.sin_port = htons(newRequest->getPort());
-	  	newRequest->setAddr(tempCli);
-	  	//Bind Socket
-		if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0) {
-			DEBUG_MSG("bind failed on read");
-			//delete newRequest;
-			regenerate_port++;
-			if (i == 29) {
-				delete newRequest;
-				return NULL;	//return false if socket could not be bound
-			}
-		} else {
-			break;
-		}
+	tempCli.sin_port = htons(newRequest->getPort());
+  	newRequest->setAddr(tempCli);
+  	//Bind Socket
+	if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0)
+	{
+		perror("bind failed on read\n");
+		delete newRequest;
+		return NULL;	//return false if socket could not be bound
 	}
 
-	string ip = "127.0.0.1"; //temp
-
-  	// create Serv address
+  	/* create Serv address */
   	struct sockaddr_in tempServ;
   	// tempServ.sin_family = AF_INET;
   	// tempServ.sin_addr.s_addr = inet_addr(host->h_addr); // uncomment for use on multiple machines
