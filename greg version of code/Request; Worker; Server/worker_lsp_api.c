@@ -544,6 +544,11 @@ bool lsp_request_close(lsp_request* a_request)
 	//go through and free all lsp_message
 	// close(a_request->getReadSocket());
 	// close(a_request->getWriteSocket());
+	//send 5 acks for last message before closing
+	for(int i = 0; i < 3; i++)
+	{
+		a_request->toAckbox(new lsp_message(a_request->getConnid(),a_request->getLastSeqnum(),""));
+	}
 	close(a_request->getSocket());
 	delete a_request;
 	return true;

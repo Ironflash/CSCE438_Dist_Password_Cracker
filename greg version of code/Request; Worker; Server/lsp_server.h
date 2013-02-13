@@ -608,7 +608,7 @@ public:
 			pthread_mutex_unlock(&m_waitingReqMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_reqMessageWaiting->m_connid);
+		printf("Req Message Waiting id: %d\n",m_reqMessageWaiting->m_connid);
 		printf("Connid: %d\n",connid);
 		m_reqMessageAcknowledged = (m_reqMessageWaiting->m_connid == connid && m_reqMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingReqMessageLock);
@@ -625,7 +625,7 @@ public:
 			pthread_mutex_unlock(&m_waitingWorkMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_workMessageWaiting->m_connid);
+		printf("Work Message Waiting id: %d\n",m_workMessageWaiting->m_connid);
 		printf("Connid: %d\n",connid);
 		m_workMessageAcknowledged = (m_workMessageWaiting->m_connid == connid && m_workMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingWorkMessageLock);

@@ -439,7 +439,7 @@ void* writeReqMessage(void* arg)
 		int sent;
 		//printf("Client Id: %d\n",connid);
 		DEBUG_MSG("Client Id: "<<connid);
-		// pthread_mutex_lock(a_srv->getReqRWLock());
+		pthread_mutex_lock(a_srv->getReqRWLock());
 		sockaddr_in* cliAddr = a_srv->getCliAddr(connid);
 		if(cliAddr == NULL)
 		{
@@ -447,6 +447,7 @@ void* writeReqMessage(void* arg)
 			DEBUG_MSG("NULL client address");
 			free (buffer);
 			delete msg;
+			pthread_mutex_unlock(a_srv->getReqRWLock());
 			continue;
 		}
 		// printf("Client Address Port: %d\n",ntohs(cliAddr->sin_port));
@@ -456,6 +457,7 @@ void* writeReqMessage(void* arg)
 		/* end thread if flagged*/
 		if(a_srv->shouldEndThreads())
 		{
+			pthread_mutex_unlock(a_srv->getReqRWLock());
 			break;
 		}
 		if((sent = sendto(a_srv->getReqSocket(), buffer, size, 0, (struct sockaddr *)cliAddr, sizeof(*cliAddr))) < 0) //need to get socket of client
@@ -467,6 +469,7 @@ void* writeReqMessage(void* arg)
 			}
 			free (buffer);
 			delete msg;
+			pthread_mutex_unlock(a_srv->getReqRWLock());
 			continue;
 		   // return false;
 		}
@@ -475,7 +478,7 @@ void* writeReqMessage(void* arg)
 			//printf("Sent: %d bytes\n",sent);
 			DEBUG_MSG("Sent: "<<sent);
 		}
-		// pthread_mutex_unlock(a_srv->getReqRWLock());
+		pthread_mutex_unlock(a_srv->getReqRWLock());
 		//check if ack for close notification was sent
 		// if(seqnum == -1)
 		// {
@@ -594,7 +597,7 @@ void* writeWorkMessage(void* arg)
 		int sent;
 		//printf("Client Id: %d\n",connid);
 		DEBUG_MSG("Client Id: "<<connid);
-		// pthread_mutex_lock(a_srv->getWorkRWLock());
+		pthread_mutex_lock(a_srv->getWorkRWLock());
 		sockaddr_in* cliAddr = a_srv->getCliAddr(connid);
 		if(cliAddr == NULL)
 		{
@@ -602,6 +605,7 @@ void* writeWorkMessage(void* arg)
 			DEBUG_MSG("NULL client address");
 			free (buffer);
 			delete msg;
+			pthread_mutex_unlock(a_srv->getWorkRWLock());
 			continue;
 		}
 		// printf("Client Address Port: %d\n",ntohs(cliAddr->sin_port));
@@ -611,6 +615,7 @@ void* writeWorkMessage(void* arg)
 		/* end thread if flagged*/
 		if(a_srv->shouldEndThreads())
 		{
+			pthread_mutex_unlock(a_srv->getWorkRWLock());
 			break;
 		}
 		if((sent = sendto(a_srv->getWorkSocket(), buffer, size, 0, (struct sockaddr *)cliAddr, sizeof(*cliAddr))) < 0) //need to get socket of client
@@ -622,6 +627,7 @@ void* writeWorkMessage(void* arg)
 			}
 			free (buffer);
 			delete msg;
+			pthread_mutex_unlock(a_srv->getWorkRWLock());
 			continue;
 		   // return false;
 		}
@@ -630,7 +636,7 @@ void* writeWorkMessage(void* arg)
 			//printf("Sent: %d bytes\n",sent);
 			DEBUG_MSG("Sent: "<<sent);
 		}
-		// pthread_mutex_unlock(a_srv->getWorkRWLock());
+		pthread_mutex_unlock(a_srv->getWorkRWLock());
 		// message is not an acknowledgment
 		if(pld != "")
 		{
@@ -666,11 +672,12 @@ void* epochTimer(void* arg)
 		vector<uint32_t> ids = a_srv->getAwaitingReqMessages();
 		if(!ids.empty())
 		{
-			//printf("sending ack because no data received\n");
+			
 			
 			// send a response to every connection that has not received a response
 			for(int i = 0; i < ids.size(); i++)
 			{
+				printf("still haven't received data from: %d\n",ids[i]);
 				if(!a_srv->requestDis(ids[i]))
 				{
 					// uint32_t seqnum = a_srv->getCliSeqnum(ids[i]);
@@ -737,9 +744,9 @@ void* epochTimer(void* arg)
 				//determin if the number of no responses is above the threshhold
 				if(a_srv->clientAboveThreshhold(connid))
 				{
-					// pthread_mutex_lock(a_srv->getReqRWLock());
+					pthread_mutex_lock(a_srv->getReqRWLock());
 					a_srv->dropClient(connid);
-					// pthread_mutex_unlock(a_srv->getReqRWLock());
+					pthread_mutex_unlock(a_srv->getReqRWLock());
 				}
 				printf("resending unacknowledged request message: %s\n",message->m_payload.c_str());
 				// DEBUG_MSG("resending unacknowledged message");
@@ -757,9 +764,9 @@ void* epochTimer(void* arg)
 				//determin if the number of no responses is above the threshhold
 				if(a_srv->clientAboveThreshhold(connid))
 				{
-					// pthread_mutex_lock(a_srv->getWorkRWLock());
+					pthread_mutex_lock(a_srv->getWorkRWLock());
 					a_srv->dropClient(connid);
-					// pthread_mutex_unlock(a_srv->getWorkRWLock());
+					pthread_mutex_unlock(a_srv->getWorkRWLock());
 				}
 				// printf("resending unacknowledged work message: %s\n",message->m_payload.c_str());
 				// DEBUG_MSG("resending unacknowledged message");
@@ -778,9 +785,9 @@ void* epochTimer(void* arg)
 				a_srv->incNoKeepAlive(ids[i]);
 				if(a_srv->clientAboveKAThreshhold(ids[i]))
 				{
-					// pthread_mutex_lock(a_srv->getReqRWLock());
+					pthread_mutex_lock(a_srv->getReqRWLock());
 					a_srv->dropClient(ids[i]);
-					// pthread_mutex_unlock(a_srv->getReqRWLock());
+					pthread_mutex_unlock(a_srv->getReqRWLock());
 				}
 			}
 		}
@@ -793,9 +800,9 @@ void* epochTimer(void* arg)
 				a_srv->incNoKeepAlive(ids[i]);
 				if(a_srv->clientAboveKAThreshhold(ids[i]))
 				{
-					// pthread_mutex_lock(a_srv->getWorkRWLock());
+					pthread_mutex_lock(a_srv->getWorkRWLock());
 					a_srv->dropClient(ids[i]);
-					// pthread_mutex_unlock(a_srv->getWorkRWLock());
+					pthread_mutex_unlock(a_srv->getWorkRWLock());
 				}
 			}
 		}
