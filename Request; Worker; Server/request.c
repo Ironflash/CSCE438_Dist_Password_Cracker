@@ -87,7 +87,7 @@ string run_sha1sum(const char * possible_password){
 int main(int argc, char **argv) {
     
     const char * host_name = "localhost";
-    unsigned short port_number = 1234;
+    unsigned short port_number = 7000;
 
     // "test" = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
 

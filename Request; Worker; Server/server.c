@@ -103,24 +103,29 @@ void * get_available_worker(void * args) {
 }
 
 void process_request_udp(uint32_t client_id, string * message){
-
+	cout<<"Request = "<<*message<<endl;
 	if (client_id % 2 == 1) {
 		DEBUG_MSG("******REQUESTER******");
-		requesters.push(client_id);
-		requests_being_processed++;
+		if (*message == "") {
+			DEBUG_MSG("request is empty");
+			total_received_requests--;
+		} else {
+			requesters.push(client_id);
+			requests_being_processed++;
 
-		// push 3 messages for the next 3 workers to process
-		pthread_mutex_lock(&messages_lock);
-		for (int i=0; i<3; i++) {
-			message_queue.push(*message);
+			// push 3 messages for the next 3 workers to process
+			pthread_mutex_lock(&messages_lock);
+			for (int i=0; i<3; i++) {
+				message_queue.push(*message);
+			}
+			pthread_mutex_unlock(&messages_lock);
+
+			print_server_status(print_out);
+			DEBUG_MSG("Sending request to worker");
+
+			//pthread_t thread_id;
+	  		//pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
 		}
-		pthread_mutex_unlock(&messages_lock);
-
-		print_server_status(print_out);
-		DEBUG_MSG("Sending request to worker");
-
-		//pthread_t thread_id;
-  		//pthread_create(& thread_id, NULL, get_available_worker, (void *)message);
 	} else if ((*message) == "join") {
 		DEBUG_MSG("******WORKER******");
 		pthread_mutex_lock(&workers_lock);
@@ -176,7 +181,7 @@ void print_server_status(bool print_out_bool){
 		for (int i=0; i<(line_width-total_received_requests); i++) {
 			cout<<" ";
 		}
-		cout<<"]"<<endl;;
+		cout<<"] "<<total_received_requests<<endl;;
 
 		cout<<"Requests Being Processed"<<endl;
 		cout<<"[";
@@ -186,7 +191,7 @@ void print_server_status(bool print_out_bool){
 		for (int i=0; i<(line_width-requests_being_processed); i++) {
 			cout<<" ";
 		}
-		cout<<"]"<<endl;;
+		cout<<"] "<<requests_being_processed<<endl;;
 		
 		cout<<"Available Workers"<<endl;
 		cout<<"[";
@@ -196,7 +201,7 @@ void print_server_status(bool print_out_bool){
 		for (int i=0; i<(line_width-number_available_workers); i++) {
 			cout<<" ";
 		}
-		cout<<"]"<<endl;;
+		cout<<"] "<<number_available_workers<<endl;;
 
 		cout<<"Workers Processing Requests"<<endl;
 		cout<<"[";
@@ -206,7 +211,7 @@ void print_server_status(bool print_out_bool){
 		for (int i=0; i<(line_width-workers_processing_requests); i++) {
 			cout<<" ";
 		}
-		cout<<"]"<<endl;;
+		cout<<"] "<<workers_processing_requests<<endl;;
 		pthread_mutex_unlock(&print_status_lock);
 	}
 }

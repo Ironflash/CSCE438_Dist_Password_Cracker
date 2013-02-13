@@ -196,9 +196,9 @@ public:
 	{
 		// pthread_mutex_lock(&m_outboxLock);
 		// printf("Req Outbox size before: %d\n",m_reqOutbox.size());
-		printf("to outbox connid: %d\n",message->m_connid);
+		DEBUG_MSG("to outbox connid: "<<message->m_connid);
 		m_reqOutbox.push(message);
-		printf("Req Outbox size after: %d\n",(int)m_reqOutbox.size());
+		DEBUG_MSG("Req Outbox size after: "<<(int)m_reqOutbox.size());
 		// pthread_mutex_unlock(&m_outboxLock);
 	}
 
@@ -608,8 +608,8 @@ public:
 			pthread_mutex_unlock(&m_waitingReqMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_reqMessageWaiting->m_connid);
-		printf("Connid: %d\n",connid);
+		DEBUG_MSG("Message Waiting id: "<<m_reqMessageWaiting->m_connid);
+		DEBUG_MSG("Connid: "<<connid);
 		m_reqMessageAcknowledged = (m_reqMessageWaiting->m_connid == connid && m_reqMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingReqMessageLock);
 		// printf("Reached 2\n");
@@ -625,8 +625,8 @@ public:
 			pthread_mutex_unlock(&m_waitingWorkMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_workMessageWaiting->m_connid);
-		printf("Connid: %d\n",connid);
+		DEBUG_MSG("Message Waiting id: "<<m_workMessageWaiting->m_connid);
+		DEBUG_MSG("Connid: "<<connid);
 		m_workMessageAcknowledged = (m_workMessageWaiting->m_connid == connid && m_workMessageWaiting->m_seqnum == seqnum);
 		pthread_mutex_unlock(&m_waitingWorkMessageLock);
 		// printf("Reached 2\n");

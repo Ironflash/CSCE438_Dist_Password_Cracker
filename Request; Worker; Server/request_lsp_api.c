@@ -25,6 +25,20 @@ using namespace std;
 #define DEBUG_MSG(str) do { } while ( false )
 #endif
 
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- SUPPORT FUNCTIONS */
+/*--------------------------------------------------------------------------*/
+
+string int2string(int number) {
+   stringstream ss; //create a stringstream
+   ss << number; //add number to the stream
+   return ss.str(); //return a string with the contents of the stream
+}
+
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- UDP Server Socket Creation*/
+/*--------------------------------------------------------------------------*/
+
 bool doneWriting = false;
 bool sentAck = false;
 // bool sentCloseNotification= false;	//if server has processed closing of request
@@ -80,7 +94,7 @@ void* readMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			printf("Dropping Packet\n");
+			DEBUG_MSG("Dropping Packet");
 			continue;
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
@@ -154,7 +168,7 @@ void* readMessage(void* arg)
 			/* check if message is a duplicate or out of order*/
 			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
 			{
-				printf("Dropping normal message\n");
+				DEBUG_MSG("Dropping normal message");
 				// drop the message
 				continue;
 			}
@@ -184,48 +198,6 @@ void* readMessage(void* arg)
 	}
 }
 
-// void* writeMessageold(void* arg)
-// {
-// 	lsp_request* a_request = (lsp_request*) arg;
-// 	// Code to marshall a lsp_message
-// 	printf("Pld: %s\n",pld.c_str());
-// 	GOOGLE_PROTOBUF_VERIFY_VERSION;
-// 	lspMessage::LspMessage* msg = new lspMessage::LspMessage();
-// 	msg->set_connid(connid); 
-// 	msg->set_seqnum(seqnum); 
-// 	msg->set_payload(pld);
-
-// 	int size = msg->ByteSize(); 
-// 	printf("Byte Size: %d\n",size);
-// 	void *buffer = malloc(size);
-// 	if(!msg->SerializeToArray(buffer, size))
-// 	{
-// 		printf("serialize failed\n");
-// 		return false;
-// 	}
-// 	printf("Marshalled successfully\n");
-// 	// end of marshalling
-
-// 	printf("Attempting to send message\n");
-// 	printf("Size of pld: %d\n", sizeof(pld));
-// 	printf("size of msg: %d\n", sizeof(*msg));
-// 	printf("Socket: %d\n",a_request->getWriteSocket());
-
-// 	int sent;
-// 	//need to convert the string to a char* for sendto
-// 	if((sent = sendto(a_request->getWriteSocket(), buffer, size, 0, (struct sockaddr *)&a_request->getWriteAddr(), sizeof(a_request->getWriteAddr()))) < 0)
-// 	{
-// 		perror("Sendto failed");
-// 	   return false;
-// 	}
-// 	else
-// 	{
-// 		printf("Sent: %d bytes\n",sent);
-// 	}
-// 	// Free up memory that was allocated while marshalling
-// 	delete buffer;
-// 	delete msg;
-// }
 /* sends a message over the network*/
 void* writeMessage(void* arg)
 {
@@ -247,7 +219,7 @@ void* writeMessage(void* arg)
 				continue;
 			}	
 			sentAck = true;
-			printf("Writing ack\n");
+			DEBUG_MSG("Writing ack");
 		}
 		else 
 		{
@@ -264,7 +236,7 @@ void* writeMessage(void* arg)
 					}	
 				}	
 				sentAck = true;
-				printf("Writing ack\n");
+				DEBUG_MSG("Writing ack");
 			}
 			else 
 			{
@@ -278,7 +250,7 @@ void* writeMessage(void* arg)
 					}
 				}
 				sentAck = false;
-				printf("Writing message\n");
+				DEBUG_MSG("Writing message");
 			}
 		}
 		/* get values from the message */
@@ -406,7 +378,7 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent data message %s\n",message->m_payload.c_str());
+			DEBUG_MSG("ack most recent data message "<<message->m_payload.c_str());
 			// DEBUG_MSG("ack most recent data message");
 			a_request->toAckbox(message);
 		}
@@ -430,8 +402,8 @@ void* epochTimer(void* arg)
 				{
 					a_request->dropServer();
 				}
-				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
-				DEBUG_MSG("resending unacknowledged message");
+				DEBUG_MSG("resending unacknowledged message "<<message->m_payload.c_str());
+				//DEBUG_MSG("resending unacknowledged message");
 				a_request->toAckbox(a_request->getMessageWaiting());
 			}
 		}
@@ -469,68 +441,45 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	{
 		return NULL;		//server name couldn't be resolved
 	}
-	 string ip = "127.0.0.1"; //temp
+	
+	// create socket
+	//newRequest->setPort(1234); // this needs to be dynamic
 
-	// /* create socket for reading */
-	// newRequest->setReadPort(1333); // this needs to be dynamic
-	// if((newRequest->setReadSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	// {
-	// 	printf("read socket creation failed\n");
-	// 	delete newRequest;
-	// 	return NULL; 		// return NULL on error
-	// }
-	// sockaddr_in tempCli;
-	// tempCli.sin_family = AF_INET;
-	// tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	// tempCli.sin_port = htons(1333); // should get from client
- //  	newRequest->setReadAddr(tempCli);
- //  	//Bind Socket
-	// if ( bind(newRequest->getReadSocket(),(struct sockaddr *) &(newRequest->getReadAddr()), sizeof(newRequest->getReadAddr())) < 0)
-	// {
-	// 	perror("bind failed on read\n");
-	// 	delete newRequest;
-	// 	return NULL;	//return false if socket could not be bound
-	// }
-
- //  	/* create socket for writing */
-	// newRequest->setWritePort(1322);
-	// if((newRequest->setWriteSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	// {
-	// 	printf("write socket creation failed\n");
-	// 	delete newRequest;
-	// 	return NULL; 		// return NULL on error
-	// }
-	// tempCli.sin_port = htons(1322);
- //  	newRequest->setWriteAddr(tempCli);
- //  	//Bind Socket
-	// if ( bind(newRequest->getWriteSocket(),(struct sockaddr *) &(newRequest->getWriteAddr()), sizeof(newRequest->getWriteAddr())) < 0)
-	// {
-	// 	perror("bind failed on write\n");
-	// 	delete newRequest;
-	// 	return NULL;	//return false if socket could not be bound
-	// }
-
-	/* create socket */
-	newRequest->setPort(1333); // this needs to be dynamic
-	if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	{
-		//printf("read socket creation failed\n");
-		DEBUG_MSG("read socket creation failed");
-		delete newRequest;
-		return NULL; 		// return NULL on error
-	}
+	// dynamic port creation:
+	int regenerate_port = 5000;
 	sockaddr_in tempCli;
+	memset(&tempCli, 0, sizeof(tempCli)); // Zero out address
 	tempCli.sin_family = AF_INET;
+	//memcpy(&tempCli.sin_addr, host->h_addr, host->h_length);
 	tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	tempCli.sin_port = htons(newRequest->getPort());
-  	newRequest->setAddr(tempCli);
-  	//Bind Socket
-	if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0)
-	{
-		perror("bind failed on read\n");
-		delete newRequest;
-		return NULL;	//return false if socket could not be bound
+	//tempCli.sin_port = pse->s_port;
+		
+	for (int i=0; i<30; i++) { //try 30 times
+		DEBUG_MSG("try # "<<i);
+		newRequest->setPort(regenerate_port); // this needs to be dynamic
+		if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0) {
+			DEBUG_MSG("read socket creation failed");
+			delete newRequest;
+			return NULL; 		// return NULL on error
+		}
+		
+		tempCli.sin_port = htons(newRequest->getPort());
+	  	newRequest->setAddr(tempCli);
+	  	//Bind Socket
+		if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0) {
+			DEBUG_MSG("bind failed on read");
+			//delete newRequest;
+			regenerate_port++;
+			if (i == 29) {
+				delete newRequest;
+				return NULL;	//return false if socket could not be bound
+			}
+		} else {
+			break;
+		}
 	}
+
+	string ip = "127.0.0.1"; //temp
 
   	/* create Serv address */
   	struct sockaddr_in tempServ;
@@ -652,7 +601,7 @@ bool lsp_request_close(lsp_request* a_request)
 	a_request->endThreads();
 	//wait for writing to finish 
 	while(!doneWriting ){}
-	printf("Closing socket\n");
+	DEBUG_MSG("Closing socket");
 	close(a_request->getSocket());
 	delete a_request;
 	return true;

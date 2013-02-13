@@ -220,20 +220,6 @@ void password_cracker(int length, int start, int stop) {
     stop_searching = false;
 }
 
-/*
-void password_cracker(string hash) {
-    // write the algorithm for password cracking
-    // for loop - iterate from a-z, aa-zz, .. aaaaaa - zzzzzz
-    // password found
-    string found = "Found: ";
-    string password = "test";
-    // password not found: answer = Not found
-    string answer = found+password;
-    cout<<"FOUND PASSWORD: "<<password<<endl;
-    lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
-}
-//*/
-
 void send_join_request(){
     // send a join request to the server
     int msg_length = 4;
@@ -249,7 +235,8 @@ int main(int argc, char **argv) {
     // Initialization
 
     const char * host_name = "localhost";
-    unsigned short port_number = 1235;
+    unsigned short port_number = 7000;
+    port_number++;
 
     number_of_worker_threads = 3;
 

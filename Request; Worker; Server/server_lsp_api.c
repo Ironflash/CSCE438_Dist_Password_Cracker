@@ -71,7 +71,7 @@ void* readReqMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			printf("Dropping Packet\n");
+			DEBUG_MSG("Dropping Packet");
 			continue;
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
@@ -114,7 +114,7 @@ void* readReqMessage(void* arg)
 		/* check if it is a close notification */
 		if(connid != 0 && seqnum == -1)
 		{
-			printf("Received close notification\n");
+			DEBUG_MSG("Received close notification");
 			a_srv->toReqAckbox(new lsp_message(connid,seqnum,""));
 			continue;
 		}
@@ -129,7 +129,7 @@ void* readReqMessage(void* arg)
 		// printf("Request info %d, %d, payload: %s\n",connid,seqnum, payload.c_str());
 		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
-			printf("Connection request detected from request\n");
+			DEBUG_MSG("Connection request detected from request");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
 			// if(a_srv->hasReqDisconnect())
@@ -209,7 +209,7 @@ void* readWorkMessage(void* arg)
 		/* end thread if flagged*/
 		if(a_srv->shouldEndThreads())
 		{
-			printf("Break Worker Read Thread\n");
+			DEBUG_MSG("Break Worker Read Thread");
 			break;
 		}
 		sockaddr_in* tempCli = (sockaddr_in*)malloc(sockLen);
@@ -220,7 +220,7 @@ void* readWorkMessage(void* arg)
 			/* end thread if flagged*/
 			if(a_srv->shouldEndThreads())
 			{
-				printf("Break Worker Read Thread\n");
+				DEBUG_MSG("Break Worker Read Thread");
 				break;
 			}
 			perror("Unable to read\n");
@@ -238,7 +238,7 @@ void* readWorkMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			printf("Dropping Packet\n");
+			DEBUG_MSG("Dropping Packet");
 			continue;
 		}
 		// Code to unmarshall a lsp_message ... still in progress 
@@ -283,7 +283,7 @@ void* readWorkMessage(void* arg)
 		/* check if this is a connection request */
 		else if(connid == 0 && seqnum == 0 && payload == "")
 		{
-			printf("Connection request detected from worker\n");
+			DEBUG_MSG("Connection request detected from worker");
 			/* Assign connection id to connection*/
 			//check for any ids that have been freed by disconnects
 			// if(a_srv->hasWorkDisconnect())
@@ -313,11 +313,11 @@ void* readWorkMessage(void* arg)
 		}
 		else if(payload != "")
 		{
-			printf("Worker message with payload %s received\n",payload.c_str());
+			DEBUG_MSG("Worker message with payload "<<payload.c_str()<<" received");
 			/* check if message is a duplicate or out of order*/
 			if(seqnum != a_srv->getCliSeqnum(connid)+1 && a_srv->getCliSeqnum(connid) > 0)
 			{
-				printf("Duplicate or out of order work message\n");
+				DEBUG_MSG("Duplicate or out of order work message");
 				// drop the message
 				continue;
 			}
@@ -362,7 +362,7 @@ void* writeReqMessage(void* arg)
 				continue;
 			}	
 			sentReqAck = true;
-			printf("Writing req ack\n");
+			DEBUG_MSG("Writing req ack");
 		}
 		else 
 		{
@@ -379,7 +379,7 @@ void* writeReqMessage(void* arg)
 					}	
 				}	
 				sentReqAck = true;
-				printf("Writing req ack\n");
+				DEBUG_MSG("Writing req ack");
 			}
 			else 
 			{
@@ -393,7 +393,7 @@ void* writeReqMessage(void* arg)
 					}
 				}
 				sentReqAck = false;
-				printf("Writing req message\n");
+				DEBUG_MSG("Writing req message");
 			}
 		}
 		// printf("reached\n");
@@ -463,7 +463,7 @@ void* writeReqMessage(void* arg)
 			perror("Req Sendto failed");
 			if(cliAddr == NULL)
 			{
-				printf("Was attempting to use a NULL address");
+				DEBUG_MSG("Was attempting to use a NULL address");
 			}
 			free (buffer);
 			delete msg;
@@ -518,7 +518,7 @@ void* writeWorkMessage(void* arg)
 				continue;
 			}	
 			sentWorkAck = true;
-			printf("Writing work ack\n");
+			DEBUG_MSG("Writing work ack");
 		}
 		else 
 		{
@@ -535,7 +535,7 @@ void* writeWorkMessage(void* arg)
 					}	
 				}	
 				sentWorkAck = true;
-				printf("Writing work ack\n");
+				DEBUG_MSG("Writing work ack");
 			}
 			else 
 			{
@@ -549,7 +549,7 @@ void* writeWorkMessage(void* arg)
 					}
 				}
 				sentWorkAck = false;
-				printf("Writing work message\n");
+				DEBUG_MSG("Writing work message");
 			}
 		}
 		// printf("reached\n");
@@ -618,7 +618,7 @@ void* writeWorkMessage(void* arg)
 			perror("Worker Sendto failed");
 			if(cliAddr == NULL)
 			{
-				printf("Was attempting to use a NULL address");
+				DEBUG_MSG("Was attempting to use a NULL address");
 			}
 			free (buffer);
 			delete msg;
@@ -710,7 +710,7 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_srv->getMostRecentReqMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent Req data message %s\n",message->m_payload.c_str());
+			DEBUG_MSG("ack most recent Req data message "<<message->m_payload.c_str());
 			// DEBUG_MSG("ack most recent data message");
 			message->m_payload = "";
 			a_srv->toReqAckbox(message);
@@ -718,7 +718,7 @@ void* epochTimer(void* arg)
 		message = a_srv->getMostRecentWorkMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent Worker data message %s\n",message->m_payload.c_str());
+			DEBUG_MSG("ack most recent Worker data message "<<message->m_payload.c_str());
 			// DEBUG_MSG("ack most recent data message");
 			a_srv->toWorkAckbox(message);
 		}
@@ -741,7 +741,7 @@ void* epochTimer(void* arg)
 					a_srv->dropClient(connid);
 					// pthread_mutex_unlock(a_srv->getReqRWLock());
 				}
-				printf("resending unacknowledged request message: %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged request message: "<<message->m_payload.c_str());
 				// DEBUG_MSG("resending unacknowledged message");
 				a_srv->toReqAckbox(message);
 			}
@@ -827,7 +827,7 @@ lsp_server* lsp_server_create(int port)
 	sockaddr_in tempServ;
 	tempServ.sin_family = AF_INET;
 	tempServ.sin_addr.s_addr = htonl(INADDR_ANY);
-	tempServ.sin_port = htons(1234);	// should get from server
+	tempServ.sin_port = htons(port);	// should get from server
 	newServer->setReqAddr(tempServ);
 
 	//Bind Socket
@@ -847,7 +847,7 @@ lsp_server* lsp_server_create(int port)
 		delete newServer;
 		return NULL; // return Null on error
 	}
-	tempServ.sin_port = htons(1235);	// should get from server
+	tempServ.sin_port = htons(port+1);	// should get from server
 	newServer->setWorkAddr(tempServ);
 
 	//Bind Socket

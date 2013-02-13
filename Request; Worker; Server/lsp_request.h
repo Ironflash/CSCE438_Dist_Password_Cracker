@@ -225,7 +225,7 @@ public:
 		{
 			return NULL;
 		}
-		printf("Request Outbox size: %d",(int)m_outbox.size());
+		DEBUG_MSG("Request Outbox size: "<<(int)m_outbox.size());
 		lsp_message* result = m_outbox.front();
 		m_outbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
@@ -240,7 +240,7 @@ public:
 		{
 			return NULL;
 		}
-		printf("Request Outbox size: %d",(int)m_ackbox.size());
+		DEBUG_MSG("Request Outbox size: "<<(int)m_outbox.size());
 		lsp_message* result = m_ackbox.front();
 		m_ackbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);

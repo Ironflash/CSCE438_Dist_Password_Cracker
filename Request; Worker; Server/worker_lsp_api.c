@@ -11,7 +11,12 @@
 #include <string>
 #include "lsp_message.c"
 #include "lsp_request.h"
-#include "lspMessage.pb.h" 
+#include "lspMessage.pb.h"
+#include <sstream>
+
+#include <iostream>
+
+using namespace std;
 
 //#define DEBUG // uncomment to turn on print outs
 #ifdef DEBUG
@@ -20,7 +25,19 @@
 #define DEBUG_MSG(str) do { } while ( false )
 #endif
 
-using namespace std;
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- SUPPORT FUNCTIONS */
+/*--------------------------------------------------------------------------*/
+
+string int2string(int number) {
+   stringstream ss; //create a stringstream
+   ss << number; //add number to the stream
+   return ss.str(); //return a string with the contents of the stream
+}
+
+/*--------------------------------------------------------------------------*/
+/* LOCAL FUNCTIONS -- UDP Server Socket Creation*/
+/*--------------------------------------------------------------------------*/
 
 bool sentAck = false;
 
@@ -62,7 +79,7 @@ void* readMessage(void* arg)
 		if(randNum <= m_dropRate*10)
 		{
 			//drop packet
-			printf("Dropping Packet\n");
+			DEBUG_MSG("Dropping Packet");
 			continue;
 		}
 		// needed to use char* to get message from recv so this converts the char* to a string that protobuf can use
@@ -138,7 +155,7 @@ void* readMessage(void* arg)
 			
 			// update the last sequnce number from server
 			a_request->increaseLastSeqnum();
-			printf("increased seqnum\n");
+			DEBUG_MSG("increased seqnum");
 
 			/* keep track of most recently received data message */
 			a_request->setMostRecentMessage(new lsp_message(connid,seqnum,""));	
@@ -178,7 +195,7 @@ void* writeMessage(void* arg)
 				continue;
 			}	
 			sentAck = true;
-			printf("Writing ack\n");
+			DEBUG_MSG("Writing ack");
 		}
 		else 
 		{
@@ -195,7 +212,7 @@ void* writeMessage(void* arg)
 					}	
 				}	
 				sentAck = true;
-				printf("Writing ack\n");
+				DEBUG_MSG("Writing ack");
 			}
 			else 
 			{
@@ -209,7 +226,7 @@ void* writeMessage(void* arg)
 					}
 				}
 				sentAck = false;
-				printf("Writing message\n");
+				DEBUG_MSG("Writing message");
 			}
 		}
 		/* get values from the message */
@@ -311,7 +328,7 @@ void* epochTimer(void* arg)
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
-			printf("ack most recent data message %s\n",message->m_payload.c_str());
+			DEBUG_MSG("ack most recent data message "<<message->m_payload.c_str());
 			// DEBUG_MSG("ack most recent data message");
 			a_request->toAckbox(message);
 		}
@@ -335,7 +352,7 @@ void* epochTimer(void* arg)
 				{
 					a_request->dropServer();
 				}
-				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
+				DEBUG_MSG("resending unacknowledged message "<<message->m_payload.c_str());
 				// DEBUG_MSG("resending unacknowledged message");
 				a_request->toAckbox(a_request->getMessageWaiting());
 			}
@@ -374,68 +391,45 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	{
 		return NULL;		//server name couldn't be resolved
 	}
-	 string ip = "127.0.0.1"; //temp
+	
+	// create socket
+	//newRequest->setPort(1234); // this needs to be dynamic
 
-	// /* create socket for reading */
-	// newRequest->setReadPort(1333); // this needs to be dynamic
-	// if((newRequest->setReadSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	// {
-	// 	printf("read socket creation failed\n");
-	// 	delete newRequest;
-	// 	return NULL; 		// return NULL on error
-	// }
-	// sockaddr_in tempCli;
-	// tempCli.sin_family = AF_INET;
-	// tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	// tempCli.sin_port = htons(1333); // should get from client
- //  	newRequest->setReadAddr(tempCli);
- //  	//Bind Socket
-	// if ( bind(newRequest->getReadSocket(),(struct sockaddr *) &(newRequest->getReadAddr()), sizeof(newRequest->getReadAddr())) < 0)
-	// {
-	// 	perror("bind failed on read\n");
-	// 	delete newRequest;
-	// 	return NULL;	//return false if socket could not be bound
-	// }
-
- //  	/* create socket for writing */
-	// newRequest->setWritePort(1322);
-	// if((newRequest->setWriteSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	// {
-	// 	printf("write socket creation failed\n");
-	// 	delete newRequest;
-	// 	return NULL; 		// return NULL on error
-	// }
-	// tempCli.sin_port = htons(1322);
- //  	newRequest->setWriteAddr(tempCli);
- //  	//Bind Socket
-	// if ( bind(newRequest->getWriteSocket(),(struct sockaddr *) &(newRequest->getWriteAddr()), sizeof(newRequest->getWriteAddr())) < 0)
-	// {
-	// 	perror("bind failed on write\n");
-	// 	delete newRequest;
-	// 	return NULL;	//return false if socket could not be bound
-	// }
-
-	/* create socket */
-	newRequest->setPort(1334); // this needs to be dynamic
-	if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0)
-	{
-		//printf("read socket creation failed\n");
-		DEBUG_MSG("read socket creation failed");
-		delete newRequest;
-		return NULL; 		// return NULL on error
-	}
+	// dynamic port creation:
+	int regenerate_port = 6000;
 	sockaddr_in tempCli;
+	memset(&tempCli, 0, sizeof(tempCli)); // Zero out address
 	tempCli.sin_family = AF_INET;
+	//memcpy(&tempCli.sin_addr, host->h_addr, host->h_length);
 	tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-	tempCli.sin_port = htons(newRequest->getPort());
-  	newRequest->setAddr(tempCli);
-  	//Bind Socket
-	if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0)
-	{
-		perror("bind failed on read\n");
-		delete newRequest;
-		return NULL;	//return false if socket could not be bound
+	//tempCli.sin_port = pse->s_port;
+		
+	for (int i=0; i<30; i++) { //try 30 times
+		DEBUG_MSG("try # "<<i);
+		newRequest->setPort(regenerate_port); // this needs to be dynamic
+		if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0) {
+			DEBUG_MSG("read socket creation failed");
+			delete newRequest;
+			return NULL; 		// return NULL on error
+		}
+		
+		tempCli.sin_port = htons(newRequest->getPort());
+	  	newRequest->setAddr(tempCli);
+	  	//Bind Socket
+		if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0) {
+			DEBUG_MSG("bind failed on read");
+			//delete newRequest;
+			regenerate_port++;
+			if (i == 29) {
+				delete newRequest;
+				return NULL;	//return false if socket could not be bound
+			}
+		} else {
+			break;
+		}
 	}
+
+	string ip = "127.0.0.1"; //temp
 
   	/* create Serv address */
   	struct sockaddr_in tempServ;
