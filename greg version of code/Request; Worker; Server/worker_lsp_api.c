@@ -22,6 +22,8 @@
 
 using namespace std;
 
+bool sentAck = false;
+
 /* Reads a message from network */
 void* readMessage(void* arg) 
 {
@@ -121,7 +123,7 @@ void* readMessage(void* arg)
 		{
 			//ignore message ... should probably send back an error
 		}
-		else // is a normal message
+		else if(payload != "")// is a normal message
 		{
 			/* check if message is a duplicate or out of order*/
 			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
@@ -136,6 +138,7 @@ void* readMessage(void* arg)
 			
 			// update the last sequnce number from server
 			a_request->increaseLastSeqnum();
+			printf("increased seqnum\n");
 
 			/* keep track of most recently received data message */
 			a_request->setMostRecentMessage(new lsp_message(connid,seqnum,""));	
@@ -148,7 +151,7 @@ void* readMessage(void* arg)
 			/* add ACK to outbox */
 			//printf("Sending ack message to outbox with id: %d\n",connid);
 			DEBUG_MSG("Sending ack message to outbox with id: "<<connid);
-			a_request->toOutbox(new lsp_message(connid,seqnum,""));	
+			a_request->toAckbox(new lsp_message(connid,seqnum,""));	
 
 		}	
 		//printf("END OF READ\n");
@@ -164,17 +167,57 @@ void* writeMessage(void* arg)
 	/* continually try to send messages */
 	while(true)
 	{
+		lsp_message* message;
 		/* Check for if last message has reveived ACK if not DO NOT get another message */
 		if(!a_request->messageAcknowledged())
 		{
-			continue;
+			/* get an ack to send */
+			message = a_request->fromAckbox();
+			if(message == NULL)
+			{
+				continue;
+			}	
+			sentAck = true;
+			printf("Writing ack\n");
+		}
+		else 
+		{
+			if(!sentAck)
+			{
+				/* get an ack to send */
+				message = a_request->fromAckbox();
+				if(message == NULL)
+				{
+					message = a_request->fromOutbox();
+					if(message == NULL)
+					{
+						continue;
+					}	
+				}	
+				sentAck = true;
+				printf("Writing ack\n");
+			}
+			else 
+			{
+				message = a_request->fromOutbox();
+				if(message == NULL)
+				{
+					message = a_request->fromAckbox();
+					if(message == NULL)
+					{
+						continue;
+					}
+				}
+				sentAck = false;
+				printf("Writing message\n");
+			}
 		}
 		/* get values from the message */
-		lsp_message* message = a_request->fromOutbox();
-		if(message == NULL)
-		{
-			continue;	// TO-DO this needs to probably be adjusted
-		}
+		// lsp_message* message = a_request->fromOutbox();
+		// if(message == NULL)
+		// {
+		// 	continue;	// TO-DO this needs to probably be adjusted
+		// }
 		string pld = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 		uint32_t connid = message->m_connid;
 		uint32_t seqnum = message->m_seqnum;
@@ -212,6 +255,8 @@ void* writeMessage(void* arg)
 		int sent;
 		//printf("Client Id: %d\n",connid);
 		DEBUG_MSG("Client Id: "<<connid);
+		DEBUG_MSG("Seqnum: "<<seqnum);
+		DEBUG_MSG("Payload: "<<pld);
 		sockaddr_in servAddr = a_request->getServAddr();
 
 		// string ip = "127.0.0.1"; //temp
@@ -260,21 +305,21 @@ void* epochTimer(void* arg)
 		{
 			//printf("resending connection request\n");
 			DEBUG_MSG("resending connection request");
-			a_request->toOutbox(new lsp_message(0,0,""));
+			a_request->toAckbox(new lsp_message(0,0,""));
 		}
 		/*Send an acknowledgment message for the most recently received data message, or an acknowledgment with sequence number 0 if no data messages have been received*/
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
 			printf("ack most recent data message %s\n",message->m_payload.c_str());
-			DEBUG_MSG("ack most recent data message");
-			a_request->toOutbox(message);
+			// DEBUG_MSG("ack most recent data message");
+			a_request->toAckbox(message);
 		}
 		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0)
  		{
  			//printf("sending keep alive signal\n");
  			DEBUG_MSG("sending keep alive signal");
- 			a_request->toOutbox(new lsp_message(a_request->getConnid(),0,""));
+ 			a_request->toAckbox(new lsp_message(a_request->getConnid(),0,""));
 		}
 		/*If a data message has been sent, but not yet acknowledged, then resend the data message */
 		if(!a_request->messageAcknowledged())
@@ -291,8 +336,8 @@ void* epochTimer(void* arg)
 					a_request->dropServer();
 				}
 				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
-				DEBUG_MSG("resending unacknowledged message");
-				a_request->toOutbox(a_request->getMessageWaiting());
+				// DEBUG_MSG("resending unacknowledged message");
+				a_request->toAckbox(a_request->getMessageWaiting());
 			}
 		}
 	}

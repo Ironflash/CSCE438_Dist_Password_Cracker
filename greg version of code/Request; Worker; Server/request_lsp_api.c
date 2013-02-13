@@ -25,6 +25,9 @@ using namespace std;
 #define DEBUG_MSG(str) do { } while ( false )
 #endif
 
+bool doneWriting = false;
+bool sentAck = false;
+// bool sentCloseNotification= false;	//if server has processed closing of request
 /* Reads a message from network */
 void* readMessage(void* arg) 
 {
@@ -47,7 +50,7 @@ void* readMessage(void* arg)
 	 //                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		// {
 		/* end thread if flagged*/
-		if(a_request->shouldEndThreads())
+		if(a_request->shouldEndThreads() )
 		{
 			//printf("Breaking read\n");
 			DEBUG_MSG("Breaking read");
@@ -57,7 +60,7 @@ void* readMessage(void* arg)
 	                 (struct sockaddr *) &tempServ, &sockLen)) < 0)
 		{
 			// if don't have this then an error will get thown at close
-			if(a_request->shouldEndThreads())
+			if(a_request->shouldEndThreads() )
 			{
 				//printf("Breaking read\n");
 				DEBUG_MSG("Breaking read");
@@ -115,6 +118,12 @@ void* readMessage(void* arg)
 		/* check if message is an ACK */
 		if(connid != 0 && seqnum != 0 && payload == "")
 		{
+			//check if it was ack for close notification
+			// if(seqnum == -1)
+			// {
+			// 	printf("Received close ack\n");
+			// 	sentCloseNotification= true;
+			// }
 			//printf("ACK received for message: %d",seqnum);
 			DEBUG_MSG("ACK received for message: "<<seqnum);
 			a_request->checkMessageAck(connid,seqnum);
@@ -140,16 +149,16 @@ void* readMessage(void* arg)
 		{
 			//ignore message ... should probably send back an error
 		}
-		else // is a normal message
+		else if(payload != "")// is a normal message
 		{
 			/* check if message is a duplicate or out of order*/
 			if(seqnum != a_request->getLastSeqnum()+1 && a_request->getLastSeqnum() > 0)
 			{
+				printf("Dropping normal message\n");
 				// drop the message
 				continue;
 			}
-			/* Add message to inbox */
-			a_request->toInbox(new lsp_message(connid,seqnum,payload,num_read));
+			
 			
 			// update the last sequnce number from server
 			a_request->increaseLastSeqnum();
@@ -165,7 +174,9 @@ void* readMessage(void* arg)
 			/* add ACK to outbox */
 			//printf("Sending ack message to outbox with id: %d\n",connid);
 			DEBUG_MSG("Sending ack message to outbox with id: "<<connid);
-			a_request->toOutbox(new lsp_message(connid,seqnum,""));	
+			a_request->toAckbox(new lsp_message(connid,seqnum,""));	
+			/* Add message to inbox */
+			a_request->toInbox(new lsp_message(connid,seqnum,payload,num_read));
 
 		}	
 		//printf("END OF READ\n");
@@ -225,16 +236,64 @@ void* writeMessage(void* arg)
 	while(true)
 	{
 		
+		lsp_message* message;
 		/* Check for if last message has reveived ACK if not DO NOT get another message */
 		if(!a_request->messageAcknowledged())
 		{
-			continue;
+			/* get an ack to send */
+			message = a_request->fromAckbox();
+			if(message == NULL)
+			{
+				continue;
+			}	
+			sentAck = true;
+			printf("Writing ack\n");
+		}
+		else 
+		{
+			if(!sentAck)
+			{
+				/* get an ack to send */
+				message = a_request->fromAckbox();
+				if(message == NULL)
+				{
+					message = a_request->fromOutbox();
+					if(message == NULL)
+					{
+						continue;
+					}	
+				}	
+				sentAck = true;
+				printf("Writing ack\n");
+			}
+			else 
+			{
+				message = a_request->fromOutbox();
+				if(message == NULL)
+				{
+					message = a_request->fromAckbox();
+					if(message == NULL)
+					{
+						continue;
+					}
+				}
+				sentAck = false;
+				printf("Writing message\n");
+			}
 		}
 		/* get values from the message */
-		lsp_message* message = a_request->fromOutbox();
-		if(message == NULL)
+		// lsp_message* message = a_request->fromOutbox();
+		// if(message == NULL)
+		// {
+		// 	//check if should quit thread
+		// 	continue;
+		// }
+		if(a_request->numMessagesLeft() == 0 && a_request->shouldEndThreads())
 		{
-			continue;	// TO-DO this needs to probably be adjusted
+			//printf("Breaking write\n");
+			DEBUG_MSG("Breaking write");
+			doneWriting = true;
+			break;
 		}
 		string pld = message->m_payload;		//convert the void* to a string pointer and set data to that of the string
 		uint32_t connid = message->m_connid;
@@ -273,6 +332,8 @@ void* writeMessage(void* arg)
 		int sent;
 		//printf("Client Id: %d\n",connid);
 		DEBUG_MSG("Client Id: "<<connid);
+		DEBUG_MSG("Seqnum: "<<seqnum);
+		DEBUG_MSG("Payload: "<<pld);
 		sockaddr_in servAddr = a_request->getServAddr();
 
 		// string ip = "127.0.0.1"; //temp
@@ -281,12 +342,12 @@ void* writeMessage(void* arg)
 		// tempServ.sin_port = htons(1234);
 
 		/* end thread if flagged*/
-		if(a_request->shouldEndThreads())
-		{
-			//printf("Breaking read\n");
-			DEBUG_MSG("Breaking read");
-			break;
-		}
+		// if(a_request->shouldEndThreads())
+		// {
+		// 	//printf("Breaking read\n");
+		// 	DEBUG_MSG("Breaking read");
+		// 	break;
+		// }
 		// if((sent = sendto(a_request->getWriteSocket(), buffer, size, 0, (struct sockaddr *) &servAddr, sizeof(servAddr))) < 0)
 		if((sent = sendto(a_request->getSocket(), buffer, size, 0, (struct sockaddr *) &servAddr, sizeof(servAddr))) < 0) 
 		{
@@ -298,7 +359,11 @@ void* writeMessage(void* arg)
 			//printf("Sent: %d bytes\n",sent);
 			DEBUG_MSG("Sent: "<<sent);
 		}
-		//message is not an acknowledgement
+		// if(seqnum == -1)
+		// {
+		// 	sentCloseNotification = true;
+		// }
+		//message is not an acknowledgement 
 		if(pld != "")
 		{
 			/* set message waiting */
@@ -321,7 +386,7 @@ void* epochTimer(void* arg)
 	while(true)
 	{
 		/* end thread if flagged*/
-		if(a_request->shouldEndThreads())
+		if(a_request->shouldEndThreads() && doneWriting)
 		{
 			//printf("Breaking epoch\n");
 			DEBUG_MSG("Breaking epoch");
@@ -331,28 +396,28 @@ void* epochTimer(void* arg)
 		sleep(a_request->getEpoch());
 		
 		/*Resend a connection request, if the original connection request has not yet been acknowledged */
-		if(!a_request->connReqAcknowledged())
+		if(!a_request->connReqAcknowledged() && !a_request->shouldEndThreads())
 		{
 			//printf("resending connection request\n");
 			DEBUG_MSG("resending connection request");
-			a_request->toOutbox(new lsp_message(0,0,""));
+			a_request->toAckbox(new lsp_message(0,0,""));
 		}
 		/*Send an acknowledgment message for the most recently received data message, or an acknowledgment with sequence number 0 if no data messages have been received*/
 		lsp_message* message = a_request->getMostRecentMessage();
 		if(message != NULL)
 		{
 			printf("ack most recent data message %s\n",message->m_payload.c_str());
-			DEBUG_MSG("ack most recent data message");
-			a_request->toOutbox(message);
+			// DEBUG_MSG("ack most recent data message");
+			a_request->toAckbox(message);
 		}
-		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0)
+		else if(!a_request->dataMessageReceived() && a_request->getConnid() != 0 && !a_request->shouldEndThreads())
  		{
  			//printf("sending keep alive signal\n");
  			DEBUG_MSG("sending keep alive signal");
- 			a_request->toOutbox(new lsp_message(a_request->getConnid(),0,""));
+ 			a_request->toAckbox(new lsp_message(a_request->getConnid(),0,""));
 		}
 		/*If a data message has been sent, but not yet acknowledged, then resend the data message */
-		if(!a_request->messageAcknowledged())
+		if(!a_request->messageAcknowledged() && !a_request->shouldEndThreads())
 		{
 			lsp_message* message = a_request->getMessageWaiting();
 			if(message != NULL)
@@ -367,7 +432,7 @@ void* epochTimer(void* arg)
 				}
 				printf("resending unacknowledged message %s\n",message->m_payload.c_str());
 				DEBUG_MSG("resending unacknowledged message");
-				a_request->toOutbox(a_request->getMessageWaiting());
+				a_request->toAckbox(a_request->getMessageWaiting());
 			}
 		}
 	}
@@ -575,7 +640,19 @@ bool lsp_request_close(lsp_request* a_request)
 	//go through and free all lsp_message
 	// close(a_request->getReadSocket());
 	// close(a_request->getWriteSocket());
+	//send 5 acks for last message before closing
+	for(int i = 0; i < 3; i++)
+	{
+			a_request->toAckbox(new lsp_message(a_request->getConnid(),a_request->getLastSeqnum(),""));
+	}
+	// send close notification
+	// lsp_message* closeMessage = new lsp_message(a_request->getConnid(),-1,"");
+	// a_request->toOutbox(closeMessage);
+	// a_request->setMessageWaiting(closeMessage);
 	a_request->endThreads();
+	//wait for writing to finish 
+	while(!doneWriting ){}
+	printf("Closing socket\n");
 	close(a_request->getSocket());
 	delete a_request;
 	return true;
