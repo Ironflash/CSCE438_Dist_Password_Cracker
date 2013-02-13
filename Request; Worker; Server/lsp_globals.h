@@ -1,8 +1,8 @@
 //Globals
 
 double m_epoch = 2;					// the number of seconds between epochs
-int m_dropThreshhold = 5;			// number of no responses before the connection is dropped
-double m_dropRate = 0;				// rate at which packets will get dropped for testing
+int m_dropThreshhold = 6;			// number of no responses before the connection is dropped
+double m_dropRate = .25;				// rate at which packets will get dropped for testing
 
 // Set length of epoch (in seconds)
 void lsp_set_epoch_lth(double lth)
