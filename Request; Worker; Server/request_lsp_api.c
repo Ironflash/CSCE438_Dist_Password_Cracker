@@ -347,10 +347,6 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	const char * port_number;
 	port_number = (int2string(port)).c_str();
 
-	// Map service name to port number
-  	struct servent * pse;
-  	pse = getservbyname(port_number, "udp");
-
 	lsp_request* newRequest = new lsp_request(); 
 	if(newRequest == NULL) {
 		DEBUG_MSG("space allocation for request failed");
@@ -371,29 +367,30 @@ lsp_request* lsp_request_create(const char* dest, int port)
 	// dynamic port creation:
 	int regenerate_port = 5000;
 	sockaddr_in tempCli;
+	memset(&tempCli, 0, sizeof(tempCli)); // Zero out address
+	tempCli.sin_family = AF_INET;
+	//memcpy(&tempCli.sin_addr, host->h_addr, host->h_length);
+	tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
+	//tempCli.sin_port = pse->s_port;
+		
 	for (int i=0; i<30; i++) { //try 30 times
-		cout<<"try # "<<i<<endl;
+		DEBUG_MSG("try # "<<i);
 		newRequest->setPort(regenerate_port); // this needs to be dynamic
 		if((newRequest->setSocket(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))) < 0) {
-			//printf("read socket creation failed\n");
 			DEBUG_MSG("read socket creation failed");
 			delete newRequest;
 			return NULL; 		// return NULL on error
 		}
 		
-		memset(&tempCli, 0, sizeof(tempCli)); // Zero out address
-		tempCli.sin_family = AF_INET;
-		//memcpy(&tempCli.sin_addr, host->h_addr, host->h_length);
-		tempCli.sin_addr.s_addr = htonl(INADDR_ANY);
-		//tempCli.sin_port = pse->s_port;
 		tempCli.sin_port = htons(newRequest->getPort());
 	  	newRequest->setAddr(tempCli);
 	  	//Bind Socket
 		if ( bind(newRequest->getSocket(),(struct sockaddr *) &(newRequest->getAddr()), sizeof(newRequest->getAddr())) < 0) {
-			perror("bind failed on read\n");
-			delete newRequest;
+			DEBUG_MSG("bind failed on read");
+			//delete newRequest;
 			regenerate_port++;
 			if (i == 29) {
+				delete newRequest;
 				return NULL;	//return false if socket could not be bound
 			}
 		} else {

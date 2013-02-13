@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
     // Initialization
 
     const char * host_name = "localhost";
-    unsigned short port_number = 1235;
+    unsigned short port_number = 7001;
 
     number_of_worker_threads = 3;
 
