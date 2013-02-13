@@ -36,21 +36,17 @@ struct clientConnection
 class lsp_server
 {
 private:
-	int m_reqPort;		//port that will be used for listening 
-	int m_reqSocket;		//socket that will listen for incoming messages from requests
-	int m_workPort;		//port that will be used for listening
-	int m_workSocket;	//socket that will listen for incoming messages from workers
-	// int m_writePort;		//port that will be used for writing messages
-	// int m_writeSocket;	//socket that will write outgoing messages 
-	sockaddr_in m_reqAddr;	//address of the server for reading requests 
-	sockaddr_in m_workAddr;	//address of the server for reading workers
-	// sockaddr_in m_writeAddr;	//address of the server for writing
-	std::queue<lsp_message*> m_reqInbox;
-	std::queue<lsp_message*> m_reqOutbox;
-	std::queue<lsp_message*> m_workInbox;
-	std::queue<lsp_message*> m_workOutbox;
-	std::queue<lsp_message*> m_reqAckbox;
-	std::queue<lsp_message*> m_workAckbox;
+	int m_readReqPort;		//port that will be used for listening 
+	int m_readReqSocket;		//socket that will listen for incoming messages from requests
+	int m_readWorkPort;		//port that will be used for listening
+	int m_readWorkSocket;	//socket that will listen for incoming messages from workers
+	int m_writePort;		//port that will be used for writing messages
+	int m_writeSocket;	//socket that will write outgoing messages 
+	sockaddr_in m_readReqAddr;	//address of the server for reading requests 
+	sockaddr_in m_readWorkAddr;	//address of the server for reading workers
+	sockaddr_in m_writeAddr;	//address of the server for writing
+	std::queue<lsp_message*> m_inbox;
+	std::queue<lsp_message*> m_outbox;
 	std::queue<uint32_t> m_reqDis;		//store connection ids of disconnected requests
 	std::queue<uint32_t> m_workDis;		//store connection ids of disconnected workers
 	std::map<uint32_t, clientConnection> m_cliConnections;	//keeps track of id to client connections
@@ -58,29 +54,20 @@ private:
 	std::vector<uint32_t> m_workerIds;		// list of worker ids
 	std::vector<uint32_t> m_requestDisconnects;		// list of the ids of requests that have been dropped
 	std::vector<uint32_t> m_workerDisconnects;		// list of the ids of workers that have been dropped
-	std::vector<uint32_t> m_awaitingReqMessages;		// list of clients that have connected and not sent a data message
-	std::vector<uint32_t> m_awaitingWorkMessages;		// list of clients that have connected and not sent a data message
+	std::vector<uint32_t> m_awaitingMessages;		// list of clients that have connected and not sent a data message
 	pthread_t 	m_readReqThread;
 	pthread_t 	m_readWorkThread;
-	pthread_t   m_writeReqThread;
-	pthread_t   m_writeWorkThread;
+	pthread_t   m_writeThread;
 	pthread_t   m_epochThread;
 	uint32_t m_nextSeqnum;
 	uint32_t m_nextReqId;		//next connection id to be assigned to request
 	uint32_t m_nextWorkId;		//next connection id to be assigned to worker
 	// pthread_mutex_t m_inboxLock;
 	// pthread_mutex_t m_outboxLock;
-	pthread_mutex_t m_waitingReqMessageLock;
-	pthread_mutex_t m_waitingWorkMessageLock;
-	pthread_mutex_t m_cliConnectionsLock;
-	pthread_mutex_t m_reqRWLock;
-	pthread_mutex_t m_workRWLock;
-	lsp_message* m_reqMessageWaiting;	// message waiting for an acknowledgment
-	lsp_message* m_workMessageWaiting;	// message waiting for an acknowledgment
-	lsp_message* m_mostRecentReqMessage;
-	lsp_message* m_mostRecentWorkMessage;
-	bool m_reqMessageAcknowledged;		// has last message been acknowledged
-	bool m_workMessageAcknowledged;		// has last message been acknowledged
+	pthread_mutex_t m_waitingMessageLock;
+	lsp_message* m_messageWaiting;	// message waiting for an acknowledgment
+	lsp_message* m_mostRecentMessage;
+	bool m_messageAcknowledged;		// has last message been acknowledged
 	bool m_endThreads;
 	// bool m_isMessageWaiting;		// keeps track if there is a server message that is awaiting approval
 	// int m_epoch;					// the number of seconds between epochs
@@ -93,82 +80,72 @@ public:
 		m_nextSeqnum = 1;
 		m_nextReqId = 1;	//Request ids will be odd
 		m_nextWorkId = 2;	//Worker ids will be even
-		m_reqMessageAcknowledged = true;
-		m_workMessageAcknowledged = true;
+		m_messageAcknowledged = true;
 		m_endThreads = false;
 		// m_isMessageWaiting = false;
-		m_mostRecentReqMessage = NULL;
-		m_mostRecentWorkMessage = NULL;
+		m_mostRecentMessage = NULL;
 		// m_epoch = 2;		// epoch defaults to intervals of 2 seconds
 		// m_dropThreshhold = 5;		// default is 5 times
 		m_KAThreshhold = 5;			// default is 5 times
 		// pthread_mutex_init(&m_inboxLock, NULL);
 		// pthread_mutex_init(&m_outboxLock, NULL);
-		pthread_mutex_init(&m_waitingReqMessageLock, NULL);
-		pthread_mutex_init(&m_waitingWorkMessageLock, NULL);
-		pthread_mutex_init(&m_cliConnectionsLock, NULL);
-		pthread_mutex_init(&m_reqRWLock, NULL);
-		pthread_mutex_init(&m_workRWLock, NULL);
+		pthread_mutex_init(&m_waitingMessageLock, NULL);
 	}
 	~lsp_server()
 	{
 		//TODO go through all client addresses and delete address pointers maybe free because used malloc
 		// pthread_mutex_destroy(&m_inboxLock);
 		// pthread_mutex_destroy(&m_outboxLock);
-		pthread_mutex_destroy(&m_waitingReqMessageLock);
-		pthread_mutex_destroy(&m_waitingWorkMessageLock);
-		pthread_mutex_destroy(&m_cliConnectionsLock);
-		pthread_mutex_destroy(&m_reqRWLock);
-		pthread_mutex_destroy(&m_workRWLock);
+		pthread_mutex_destroy(&m_waitingMessageLock);
 	}
 	/* setters */
-	void setReqPort(int port)
+	void setReadReqPort(int port)
 	{
-		m_reqPort = port;
+		m_readReqPort = port;
 	}
 
-	int setReqSocket(int socket)
+	int setReadReqSocket(int socket)
 	{
-		m_reqSocket = socket;
-		return m_reqSocket;
+		m_readReqSocket = socket;
+		return m_readReqSocket;
 	}
 
-	void setReqAddr(struct sockaddr_in servaddr)
+	void setReadReqAddr(struct sockaddr_in servaddr)
 	{
-		m_reqAddr = servaddr;
+		m_readReqAddr = servaddr;
 	}  
 
-	void setWorkPort(int port)
+	void setReadWorkPort(int port)
 	{
-		m_workPort = port;
+		m_readWorkPort = port;
 	}
 
-	int setWorkSocket(int socket)
+	int setReadWorkSocket(int socket)
 	{
-		m_workSocket = socket;
-		return m_workSocket;
+		m_readWorkSocket = socket;
+		return m_readWorkSocket;
 	}
 
-	void setWorkAddr(struct sockaddr_in servaddr)
+	void setReadWorkAddr(struct sockaddr_in servaddr)
 	{
-		m_workAddr = servaddr;
+		m_readWorkAddr = servaddr;
 	}  
 
-	// void setWritePort(int port)
-	// {
-	// 	m_writePort = port;
-	// }
+	void setWritePort(int port)
+	{
+		m_writePort = port;
+	}
 
-	// int setWriteSocket(int socket)
-	// {
-	// 	m_writeSocket = socket;
-	// 	return m_writeSocket;
-	// }
+	int setWriteSocket(int socket)
+	{
+		m_writeSocket = socket;
+		return m_writeSocket;
+	}
 
-	// void setWriteAddr(struct sockaddr_in servaddr)
-	// {
-	// 	m_writeAddr = servaddr;
-	// }  
+	void setWriteAddr(struct sockaddr_in servaddr)
+	{
+		m_writeAddr = servaddr;
+	}  
 
 	// void setEpoch(int seconds)
 	// {
@@ -182,77 +159,37 @@ public:
 
 	void toCliAddr(uint32_t connid, sockaddr_in* addr)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		m_cliConnections[connid].addr = addr;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 	}
 
-	void toReqInbox(lsp_message* message)
+	void toInbox(lsp_message* message)
 	{
-		m_reqInbox.push(message);
+		// printf("Attempting to add to inbox\n");
+		// pthread_mutex_lock(&m_inboxLock);
+		m_inbox.push(message);
+		// pthread_mutex_unlock(&m_inboxLock);
+		// printf("Added to inbox\n");
 	}
 
-	void toReqOutbox(lsp_message* message)
+	void toOutbox(lsp_message* message)
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-		// printf("Req Outbox size before: %d\n",m_reqOutbox.size());
-		printf("to outbox connid: %d\n",message->m_connid);
-		m_reqOutbox.push(message);
-		printf("Req Outbox size after: %d\n",m_reqOutbox.size());
+		m_outbox.push(message);
 		// pthread_mutex_unlock(&m_outboxLock);
 	}
 
-	void toWorkInbox(lsp_message* message)
+	void setMessageWaiting(lsp_message* message)
 	{
-		m_workInbox.push(message);
-	}
-
-	void toWorkOutbox(lsp_message* message)
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-		m_workOutbox.push(message);
-		// pthread_mutex_unlock(&m_outboxLock);
-	}
-
-	void toReqAckbox(lsp_message* message)
-	{
-		m_reqAckbox.push(message);
-	}
-
-	void toWorkAckbox(lsp_message* message)
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-		// printf("Req Outbox size before: %d\n",m_reqOutbox.size());
-		m_workAckbox.push(message);
-		// pthread_mutex_unlock(&m_outboxLock);
-	}
-
-	void setReqMessageWaiting(lsp_message* message)
-	{
-		pthread_mutex_lock(&m_waitingReqMessageLock);
-		m_reqMessageWaiting = message;
+		pthread_mutex_lock(&m_waitingMessageLock);
+		m_messageWaiting = message;
 		// m_isMessageWaiting = true;
-		m_reqMessageAcknowledged = false;
-		pthread_mutex_unlock(&m_waitingReqMessageLock);
+		m_messageAcknowledged = false;
+		pthread_mutex_unlock(&m_waitingMessageLock);
 	}
 
-	void setWorkMessageWaiting(lsp_message* message)
+	void setMostRecentMessage(lsp_message* message)
 	{
-		pthread_mutex_lock(&m_waitingWorkMessageLock);
-		m_workMessageWaiting = message;
-		// m_isMessageWaiting = true;
-		m_workMessageAcknowledged = false;
-		pthread_mutex_unlock(&m_waitingWorkMessageLock);
-	}
-
-	void setMostRecentReqMessage(lsp_message* message)
-	{
-		m_mostRecentReqMessage = new lsp_message(*message);
-	}
-
-	void setMostRecentWorkMessage(lsp_message* message)
-	{
-		m_mostRecentWorkMessage = new lsp_message(*message);
+		m_mostRecentMessage = new lsp_message(*message);
 	}
 
 	void addRequest(uint32_t connid)
@@ -267,71 +204,59 @@ public:
 
 	/* getters */
 
-	int getReqPort() const
+	int getReadReqPort() const
 	{
-		return m_reqPort;
+		return m_readReqPort;
 	}
 
-	int getReqSocket() const
+	int getReadReqSocket() const
 	{
-		return m_reqSocket;
+		return m_readReqSocket;
 	}
 
-	int getWorkPort() const
+	int getReadWorkPort() const
 	{
-		return m_workPort;
+		return m_readWorkPort;
 	}
 
-	int getWorkSocket() const
+	int getReadWorkSocket() const
 	{
-		return m_workSocket;
+		return m_readWorkSocket;
 	}
 
-	pthread_mutex_t* getReqRWLock()
+	int getWritePort() const
 	{
-		return &m_reqRWLock;
+		return m_writePort;
 	}
 
-	pthread_mutex_t* getWorkRWLock()
+	int getWriteSocket() const
 	{
-		return &m_workRWLock;
-	}  
-
-	// int getWritePort() const
-	// {
-	// 	return m_writePort;
-	// }
-
-	// int getWriteSocket() const
-	// {
-	// 	return m_writeSocket;
-	// }
-
-	struct sockaddr_in getReqAddr() const
-	{
-		return m_reqAddr;
+		return m_writeSocket;
 	}
 
-	struct sockaddr_in getWorkAddr() const
+	struct sockaddr_in getReadReqAddr() const
 	{
-		return m_workAddr;
+		return m_readReqAddr;
 	}
 
-	// struct sockaddr_in getWriteAddr() const
-	// {
-	// 	return m_writeAddr;
-	// }
+	struct sockaddr_in getReadWorkAddr() const
+	{
+		return m_readWorkAddr;
+	}
+
+	struct sockaddr_in getWriteAddr() const
+	{
+		return m_writeAddr;
+	}
 
 	sockaddr_in* getCliAddr(uint32_t connid) 
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		//printf("num cli: %d\n",(int)m_cliConnections.size());
 		DEBUG_MSG("num cli: "<<(int)m_cliConnections.size());
 		if(m_cliConnections.empty())
 		{
 			//printf("cliAddresses empty\n");
 			DEBUG_MSG("cliAddresses empty");
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return NULL;
 		}
 		else
@@ -344,29 +269,23 @@ public:
 		DEBUG_MSG("num of clients with address "<<connid": "<<(int)m_cliConnections.count(connid));
 		if(m_cliConnections.count(connid) == 0)
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return NULL;
 		}
 		sockaddr_in* result = m_cliConnections[connid].addr;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 		return result;
 	}
 
 	uint32_t getCliSeqnum(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.empty())
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return -1;
 		}
 		if(m_cliConnections.count(connid) == 0)
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return -1;
 		}
 		uint32_t result = m_cliConnections[connid].seqnum;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 		return result;
 	}
 
@@ -380,14 +299,9 @@ public:
 		return m_readWorkThread;
 	}
 
-	pthread_t getWriteReqThread() const
+	pthread_t getWriteThread() const
 	{
-		return m_writeReqThread;
-	}
-
-	pthread_t getWriteWorkThread() const
-	{
-		return m_writeWorkThread;
+		return m_writeThread;
 	}
 
 	pthread_t getEpochThread() const
@@ -405,24 +319,14 @@ public:
 		return m_workerIds;
 	}
 
-	lsp_message* getReqMessageWaiting()
+	lsp_message* getMessageWaiting()
 	{
-		return m_reqMessageWaiting;
+		return m_messageWaiting;
 	}
 
-	lsp_message* getWorkMessageWaiting()
+	lsp_message* getMostRecentMessage() const
 	{
-		return m_workMessageWaiting;
-	}
-
-	lsp_message* getMostRecentReqMessage() const
-	{
-		return m_mostRecentReqMessage;
-	}
-
-	lsp_message* getMostRecentWorkMessage() const
-	{
-		return m_mostRecentWorkMessage;
+		return m_mostRecentMessage;
 	}
 
 	int getEpoch() const
@@ -445,80 +349,28 @@ public:
 		return result;
 	}
 
-	lsp_message* fromReqInbox()
+	lsp_message* fromInbox()
 	{
 		// pthread_mutex_lock(&m_inboxLock);
-		if(m_reqInbox.empty())
+		if(m_inbox.empty())
 		{
 			return NULL;
 		}
-		lsp_message* result = m_reqInbox.front();
-		m_reqInbox.pop();
+		lsp_message* result = m_inbox.front();
+		m_inbox.pop();
 		// pthread_mutex_unlock(&m_inboxLock);
 		return result;
 	}
 
-	lsp_message* fromWorkInbox()
-	{
-		// pthread_mutex_lock(&m_inboxLock);
-		if(m_workInbox.empty())
-		{
-			return NULL;
-		}
-		lsp_message* result = m_workInbox.front();
-		m_workInbox.pop();
-		// pthread_mutex_unlock(&m_inboxLock);
-		return result;
-	}
-
-	lsp_message* fromReqOutbox()
+	lsp_message* fromOutbox()
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-		if(m_reqOutbox.empty())
+		if(m_outbox.empty())
 		{
 			return NULL;
 		}
-		lsp_message* result = m_reqOutbox.front();
-		m_reqOutbox.pop();
-		// pthread_mutex_unlock(&m_outboxLock);
-		return result;
-	}
-
-	lsp_message* fromWorkOutbox()
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-		if(m_workOutbox.empty())
-		{
-			return NULL;
-		}
-		lsp_message* result = m_workOutbox.front();
-		m_workOutbox.pop();
-		// pthread_mutex_unlock(&m_outboxLock);
-		return result;
-	}
-
-	lsp_message* fromReqAckbox()
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-		if(m_reqAckbox.empty())
-		{
-			return NULL;
-		}
-		lsp_message* result = m_reqAckbox.front();
-		m_reqAckbox.pop();
-		// pthread_mutex_unlock(&m_outboxLock);
-		return result;
-	}
-
-	lsp_message* fromWorkAckbox()
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-		if(m_workAckbox.empty())
-		{
-			return NULL;
-		}
-		lsp_message* result = m_workAckbox.front();
-		m_workAckbox.pop();
+		lsp_message* result = m_outbox.front();
+		m_outbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
 		return result;
 	}
@@ -526,15 +378,11 @@ public:
 	uint32_t nextSeq(uint32_t connid)
 	{
 		// return m_nextSeqnum++;
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) == 0)
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return -1;
 		}
-		uint32_t result = m_cliConnections[connid].nextServSeqnum++;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
-		return result;
+		return m_cliConnections[connid].nextServSeqnum++;
 	}
 
 	uint32_t nextReqDis()
@@ -576,7 +424,6 @@ public:
 	/* map remove */
 	void removeCliAddr(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) > 0)
 		{
 			//printf("removeing addr\n");
@@ -584,7 +431,6 @@ public:
 			std::map<uint32_t, clientConnection>::iterator it = m_cliConnections.find(connid);
 			m_cliConnections.erase(it);
 		}
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 	}
 
 
@@ -599,57 +445,28 @@ public:
 		return !m_workDis.empty();
 	}
 
-	void checkReqMessageAck(uint32_t connid, uint32_t seqnum)
+	void checkMessageAck(uint32_t connid, uint32_t seqnum)
 	{
-		pthread_mutex_lock(&m_waitingReqMessageLock);
+		pthread_mutex_lock(&m_waitingMessageLock);
 		/* if message Waiting is null then it isn't an acknowledgement */
-		if(m_reqMessageWaiting == NULL)
+		if(m_messageWaiting == NULL)
 		{
-			pthread_mutex_unlock(&m_waitingReqMessageLock);
+			pthread_mutex_unlock(&m_waitingMessageLock);
 			return;
 		}
-		printf("Message Waiting id: %d\n",m_reqMessageWaiting->m_connid);
-		printf("Connid: %d\n",connid);
-		m_reqMessageAcknowledged = (m_reqMessageWaiting->m_connid == connid && m_reqMessageWaiting->m_seqnum == seqnum);
-		pthread_mutex_unlock(&m_waitingReqMessageLock);
+		// printf("Message Waiting id: %d\n",m_messageWaiting->m_connid);
+		m_messageAcknowledged = (m_messageWaiting->m_connid == connid && m_messageWaiting->m_seqnum == seqnum);
+		pthread_mutex_unlock(&m_waitingMessageLock);
 		// printf("Reached 2\n");
 		return;
 	}
-
-	void checkWorkMessageAck(uint32_t connid, uint32_t seqnum)
+	bool messageAcknowledged()
 	{
-		pthread_mutex_lock(&m_waitingWorkMessageLock);
-		/* if message Waiting is null then it isn't an acknowledgement */
-		if(m_workMessageWaiting == NULL)
-		{
-			pthread_mutex_unlock(&m_waitingWorkMessageLock);
-			return;
-		}
-		printf("Message Waiting id: %d\n",m_workMessageWaiting->m_connid);
-		printf("Connid: %d\n",connid);
-		m_workMessageAcknowledged = (m_workMessageWaiting->m_connid == connid && m_workMessageWaiting->m_seqnum == seqnum);
-		pthread_mutex_unlock(&m_waitingWorkMessageLock);
-		// printf("Reached 2\n");
-		return;
+		return m_messageAcknowledged;
 	}
-
-	bool reqMessageAcknowledged()
+	bool awaitingAck()
 	{
-		return m_reqMessageAcknowledged;
-	}
-
-	bool workMessageAcknowledged()
-	{
-		return m_workMessageAcknowledged;
-	}
-	bool awaitingReqAck()
-	{
-		return (m_reqMessageWaiting != NULL);
-	}
-
-	bool awaitingWorkAck()
-	{
-		return (m_workMessageWaiting != NULL);
+		return (m_messageWaiting != NULL);
 	}
 
 	// determines if a request with the given id has been disconnected
@@ -680,30 +497,22 @@ public:
 
 	void updateClientSeqnum(uint32_t connid,uint32_t seqnum)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		m_cliConnections[connid].seqnum = seqnum;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 		
 	}
 
 	void noResponse(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		m_cliConnections[connid].numNoResponses++;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 	}
 
 	bool clientAboveThreshhold(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) == 0)
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return false;
 		}
-		bool result = m_cliConnections[connid].numNoResponses > m_dropThreshhold;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
-		return result;
+		return m_cliConnections[connid].numNoResponses > m_dropThreshhold;
 	}
 
 	void dropClient(uint32_t connid)
@@ -726,8 +535,6 @@ public:
 				it = std::find(m_workerIds.begin(), m_workerIds.end(), connid);
 				m_workerIds.erase(it);
 			}
-			//required so that the server will go on and not wait for a reply
-			m_reqMessageAcknowledged = true;
 		}
 		else	// the connection id is for a request
 		{
@@ -744,44 +551,34 @@ public:
 				it = std::find(m_requestIds.begin(), m_requestIds.end(), connid);
 				m_requestIds.erase(it);
 			}
-			//required so that the server will go on and not wait for a reply
-			m_workMessageAcknowledged = true;
 		}
 		
+		//required so that the server will go on and not wait for a reply
+		m_messageAcknowledged = true;
 	}
 
 	bool dataSentTo(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) > 0)
 		{
-			bool result = m_cliConnections[connid].dataSent;
-			pthread_mutex_unlock(&m_cliConnectionsLock);
-			return result;
+			return m_cliConnections[connid].dataSent;
 		}
-		pthread_mutex_unlock(&m_cliConnectionsLock);
-		return false;
 	}
 
 	void dataWasSentTo(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		m_cliConnections[connid].dataSent = true;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 	}
 
 	bool keepAliveReceived(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) == 0)
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return false;
 		}
 		bool result = m_cliConnections[connid].keepAlive;
 		//reset for next keep alive message
 		m_cliConnections[connid].keepAlive = false;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 		return result;
 	}
 
@@ -789,34 +586,26 @@ public:
 	{
 		//reset num no keep alive 
 		//printf("num keep alive reset\n");
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		DEBUG_MSG("num keep alive reset");
 		m_cliConnections[connid].numNoKeepAlive = 0;
 		m_cliConnections[connid].keepAlive = true;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 	}
 
 	void incNoKeepAlive(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) > 0)
 		{
 			m_cliConnections[connid].numNoKeepAlive++;
 		}
-		pthread_mutex_unlock(&m_cliConnectionsLock);
 	}
 
 	bool clientAboveKAThreshhold(uint32_t connid)
 	{
-		pthread_mutex_lock(&m_cliConnectionsLock);
 		if(m_cliConnections.count(connid) == 0)
 		{
-			pthread_mutex_unlock(&m_cliConnectionsLock);
 			return false;
 		}
-		bool result = m_cliConnections[connid].numNoKeepAlive >  m_KAThreshhold;
-		pthread_mutex_unlock(&m_cliConnectionsLock);
-		return result;
+		return m_cliConnections[connid].numNoKeepAlive >  m_KAThreshhold;
 	}
 
 	void endThreads()
@@ -830,44 +619,24 @@ public:
 	}
 
 	/* awaiting message functions */
-	void awaitingReqMessage(uint32_t connid)
+	void awaitingMessage(uint32_t connid)
 	{
-		m_awaitingReqMessages.push_back(connid);
+		m_awaitingMessages.push_back(connid);
 	}
 
-	void awaitingWorkMessage(uint32_t connid)
+	void removeAwaitingMessage(uint32_t connid)
 	{
-		m_awaitingWorkMessages.push_back(connid);
-	}
-
-	void removeAwaitingReqMessage(uint32_t connid)
-	{
-		if(std::count(m_awaitingReqMessages.begin(), m_awaitingReqMessages.end(),connid) > 0)
+		if(std::count(m_awaitingMessages.begin(), m_awaitingMessages.end(),connid) > 0)
 		{
 			std::vector<uint32_t>::iterator it;
-			it = std::find(m_awaitingReqMessages.begin(), m_awaitingReqMessages.end(), connid);
-			m_awaitingReqMessages.erase(it);
+			it = std::find(m_awaitingMessages.begin(), m_awaitingMessages.end(), connid);
+			m_awaitingMessages.erase(it);
 		}
 	}
 
-	void removeAwaitingWorkMessage(uint32_t connid)
+	std::vector<uint32_t> getAwaitingMessages() const
 	{
-		if(std::count(m_awaitingWorkMessages.begin(), m_awaitingWorkMessages.end(),connid) > 0)
-		{
-			std::vector<uint32_t>::iterator it;
-			it = std::find(m_awaitingWorkMessages.begin(), m_awaitingWorkMessages.end(), connid);
-			m_awaitingWorkMessages.erase(it);
-		}
-	}
-
-	std::vector<uint32_t> getAwaitingReqMessages() const
-	{
-		return m_awaitingReqMessages;
-	}
-
-	std::vector<uint32_t> getAwaitingWorkMessages() const
-	{
-		return m_awaitingWorkMessages;
+		return m_awaitingMessages;
 	}
 
 

@@ -15,25 +15,212 @@
 
 #include <string>
 #include <iostream>
+#include <fstream>
+#include <vector>
+#include <assert.h>
+#include <sys/time.h>
+
 #include "worker_lsp_api.c"
+
+//#define DEBUG // uncomment to turn on print outs
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 using namespace std;
 
 /*--------------------------------------------------------------------------*/
 /* CONSTANTS/VARIABLES */
 /*--------------------------------------------------------------------------*/
-static int number_of_worker_threads;
 
-static pthread_t e_thread;
+static string request_hash;
+static bool last = false;
+
+static int number_of_worker_threads;
 static pthread_t *w_threads;
+
+static string alphabet[26] = { "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z" };
+
+static string answer;
+static bool stop_searching = false;
 
 // Create Request Client-Server Communication channel
 static struct lsp_request* worker_channel;
 
 /*--------------------------------------------------------------------------*/
+/* DATA STRUCTURES */ 
+/*--------------------------------------------------------------------------*/
+
+vector<long> musecs;
+vector<long> secs;
+
+typedef struct start_stop {
+    int start;
+    int stop;
+    int length;
+} START_STOP;
+
+/*--------------------------------------------------------------------------*/
 /* LOCAL FUNCTIONS */
 /*--------------------------------------------------------------------------*/
 
+void print_time_diff(struct timeval * tp1, struct timeval * tp2) {
+    /* Prints to stdout the difference, in seconds and museconds, between two
+    timevals. */
+    long sec = tp2->tv_sec - tp1->tv_sec;
+    long musec = tp2->tv_usec - tp1->tv_usec;
+    if (musec < 0) {
+        musec += 1000000;
+        sec--;
+    }
+    cout<<" [sec = "<<sec<<", musec = "<<musec<<"] "<<endl;
+    musecs.push_back(musec);
+    secs.push_back(sec);
+}
+
+void update_indices(int pos, int int_array[], int limit) {
+    int_array[pos]++;
+    if (pos+1 == limit) {
+        return;
+    } else if (int_array[pos] == 26) {
+            int_array[pos] = 0;
+            update_indices(pos+1, int_array, limit);
+    }
+}
+
+string run_sha1sum(const char * possible_password){
+    const char * system_call_a = "echo -n ";
+    const char * system_call_b = " | shasum | awk '{print $1}'";
+    char system_call[100];
+    strcpy(system_call, system_call_a);
+    strcat(system_call, possible_password);
+    strcat(system_call, system_call_b);
+    
+    //Run System Call and extract result from stdout
+    char buf [256];
+    FILE *p = popen(system_call, "r");
+    string s;
+    for (size_t count; (count = fread(buf, 1, sizeof(buf), p));)
+        s += string(buf, buf + count);
+    pclose(p);
+
+    return s.substr(0,40);
+}
+
+void *cracker_minion(void * args) {
+    START_STOP * range = (START_STOP *) args;
+
+    int start = range->start;
+    int stop = range->stop;
+    int length = range->length;
+
+    int *index;
+    index = new int[length];
+
+    string start_password;
+    string last_password;
+
+    for(int i=0; i<length; i++) {
+        index[i] = start;
+        start_password+=alphabet[start];
+        last_password+=alphabet[stop];
+    }
+    DEBUG_MSG("Thread ID ["<<pthread_self()<<"]: "<<start_password);
+    string result = run_sha1sum(start_password.c_str());
+    if (result == request_hash.substr(0,40)) {
+        stop_searching = true;
+        answer = start_password;
+    } else {
+        while(start_password != last_password && stop_searching != true) {
+            start_password = "";
+            update_indices(0, index, length);
+            for (int j=0; j<length; j++){
+                start_password+=alphabet[index[j]];
+            }
+            DEBUG_MSG("Thread ID ["<<pthread_self()<<"]: "<<start_password);
+            result = run_sha1sum(start_password.c_str());
+            if (result == request_hash.substr(0,40)) {
+                stop_searching = true;
+                answer = start_password;
+                break;
+            }
+        }
+    }
+    pthread_exit(NULL);
+}
+
+void wait_for_all_threads() {
+    for (int i=0; i<number_of_worker_threads; i++){
+        pthread_join(w_threads[i], NULL);
+    }    
+    DEBUG_MSG("***************All worker threads are done***************");
+}
+
+void password_cracker(int length, int start, int stop) {
+    // Multithreaded algorithm for password cracking
+    w_threads = new pthread_t [number_of_worker_threads];
+
+    int *index;
+    index = new int[number_of_worker_threads+1];
+    index[0] = start;
+
+    int breakdown = (stop+1-start)/number_of_worker_threads;
+    int high = breakdown*number_of_worker_threads;
+    for (int i = 1; i<(number_of_worker_threads+1); i++){
+        index[i] = index[i-1]+breakdown;
+    }
+    int full = (stop+1-start)-high;
+    if (full > 0) {
+        int temp;
+        for (int i = 0; i<full; i++){
+            temp = (number_of_worker_threads+1)-i;
+            index[temp]=index[temp]+(full-i);
+        }
+    }
+    for (int i=0; i<(number_of_worker_threads+1); i++){
+        DEBUG_MSG("index ["<<i<<"] = "<<index[i]);
+    }
+
+    int worker_thread;
+    for (int i = 0; i<number_of_worker_threads; i++){
+        START_STOP *range = new START_STOP;
+        range->start = index[i];
+        range->stop = index[i+1];
+        range->length = length;
+        worker_thread = pthread_create(&w_threads[i], NULL, cracker_minion, (void *)range);
+        if (worker_thread){
+            cout<<"ERROR: return code from pthread_create() is "<<worker_thread<<endl;
+            exit(-1);
+        }
+    }
+    wait_for_all_threads();
+    //delete index;
+    if (stop_searching == true) {
+        cout<<"****************YAY FOUND PASSWORD****************"<<endl;
+        cout<<"Hash : "<<request_hash<<endl;
+        string found_string = "Found: ";
+        answer = found_string+answer;
+        cout<<answer<<endl;
+    } else {
+        cout<<"**************ALL THAT FOR NOTHING?!**************"<<endl;
+        cout<<"Hash : "<<request_hash<<endl;
+        if (last == true) {
+            answer = "Not Found5";
+        } else {
+            answer = "Not Found";
+        }
+    }
+    //lsp_request_write(worker_channel,result,result.length()); //UDP-LSP
+    lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
+    request_hash = "";
+    last = false;
+    answer = "";
+    stop_searching = false;
+}
+
+/*
 void password_cracker(string hash) {
     // write the algorithm for password cracking
     // for loop - iterate from a-z, aa-zz, .. aaaaaa - zzzzzz
@@ -45,178 +232,13 @@ void password_cracker(string hash) {
     cout<<"FOUND PASSWORD: "<<password<<endl;
     lsp_request_write(worker_channel,answer,answer.length()); //UDP-LSP
 }
+//*/
 
 void send_join_request(){
     // send a join request to the server
     int msg_length = 4;
     string request_msg = "join";
     lsp_request_write(worker_channel,request_msg,msg_length); //UDP-LSP
-}
-
-//313 worker thread/event handler functions:
-
-void *worker_thread(void * arguments) {
-    //cout<<"**************************Thread ID ["<<pthread_self()<<"]"<<endl;
-    /*
-    NetworkRequestChannel * worker_channel = ((NetworkRequestChannel*)arguments);
-    while (true) {
-        REQUEST_NODE * removed_request = new REQUEST_NODE;
-        removed_request = bounded_buffer->remove();
-        int requester = removed_request->requester_id;
-        if ((removed_request->request_name) == "quit") {
-            worker_channel->send_request(removed_request->request_name);
-            break;
-        }
-        string reply = (*worker_channel).send_request(removed_request->request_name);
-        int random_response = atoi(reply.c_str());
-        STATISTIC_NODE * new_statistic = new STATISTIC_NODE;
-        new_statistic->requester_id = requester;
-        new_statistic->statistic_value = random_response;
-        deposit->insert(new_statistic);
-    }
-    delete worker_channel;
-    pthread_exit(NULL);
-    */
-}
-
-void *event_handler_thread(void * arguments) {
-    /*
-    cout<<"**************************Running Event Handler"<<endl;
-    int have_read[number_of_worker_threads]; //keeps track of what channels have been read from
-    int have_written[number_of_worker_threads]; //keeps track of what channels have been written to
-    int requester_ids[number_of_worker_threads]; //keeps track of what channels have been written to
-    int requests_left = 0;
-    int max_fd = 0;
-    fd_set readset;
-    bool exit_thread = false;
-    for (int i=0;i <number_of_worker_threads; i++){
-        have_read[i] = 0;
-        have_written[i] = 0;
-        requester_ids[i] = 0;
-    }
-    // loop till bounded_buffer is completely empty
-    while (!exit_thread) {
-        FD_ZERO(&readset);
-        for (int i = 0; i < number_of_worker_threads; i++) {
-            // we skip all the necessary error checking
-            FD_SET(r_fd[i], &readset);
-            max_fd = max(r_fd[i], max_fd);
-        }
-        // pump requests through all the channels that haven't been read from
-        for (int i=0; i<number_of_worker_threads; i++){
-            if (have_read[i] == 0) { // this fd has been read thus we can write to it
-                have_written[i] = 0;
-                REQUEST_NODE * removed_request = new REQUEST_NODE;
-                removed_request = bounded_buffer->remove();
-                requester_ids[i] = removed_request->requester_id;
-                channel_pointer[i]->cwrite(removed_request->request_name);
-                /*
-                const char * s = (removed_request->request_name).c_str();
-                if (write(w_fd[i], s, strlen(s)+1) < 0) {
-                    perror(string("ERROR: Writing to pipe! FD = %d\n", w_fd[i]).c_str());
-                }
-                //*/
-                /*
-                have_written[i] = 1;
-                requests_left++;
-                if ((removed_request->request_name) == "quit") {
-                    have_read[i] = -1;
-                    cout<<"...Quitting..."<<endl;
-                    exit_thread = true;
-                    break;
-                }
-            }
-        }
-        if (exit_thread) {
-            while (requests_left > 0) {
-                FD_ZERO(&readset);
-                for (int i = 0; i < number_of_worker_threads; i++) {
-                    // we skip all the necessary error checking
-                    FD_SET(r_fd[i], &readset);
-                    max_fd = max(r_fd[i], max_fd);
-                }
-                int numready = select(max_fd+1, &readset, NULL, NULL, NULL);
-                if ((numready == -1) && (errno == EINTR)) { // interrupted by signal; continue monitoring
-                    cout<<"signal interrupt"<<endl;
-                    continue;
-                } else if (numready == -1) { // a real error happened; abort monitoring
-                    cout<<"select() error"<<endl;
-                    break;
-                }
-                for (int i = 0; i < number_of_worker_threads; i++) {
-                    if (FD_ISSET(r_fd[i], &readset)) { // this file descriptor is ready
-                        //char buf[255];
-                        string read_response = channel_pointer[i]->cread();
-                        //int bytesread = read(r_fd[i], buf, 255);
-                        //string read_response = buf;
-                        if (read_response != "bye") {
-                            int random_response = atoi(read_response.c_str());
-                            STATISTIC_NODE * new_statistic = new STATISTIC_NODE;
-                            new_statistic->requester_id = requester_ids[i];
-                            new_statistic->statistic_value = random_response;
-                            deposit->insert(new_statistic);
-                        }
-                        requests_left--;
-                    }
-                }
-            }
-            break;
-        }
-        bool done = false;
-        while (!done) {
-            int numready = select(max_fd+1, &readset, NULL, NULL, NULL);
-            if ((numready == -1) && (errno == EINTR)) {
-                // interrupted by signal; continue monitoring
-                cout<<"signal interrupt"<<endl;
-                continue;
-            } else if (numready == -1) {
-                // a real error happened; abort monitoring
-                cout<<"select() error"<<endl;
-                break;
-            }
-            for (int i = 0; i < number_of_worker_threads; i++) {
-                have_read[i] = 1;
-                if (FD_ISSET(r_fd[i], &readset)) { // this descriptor is ready
-                    char buf[255];
-                    int bytesread = read(r_fd[i], buf, 255);
-                    string read_response = buf;
-                    int random_response = atoi(read_response.c_str());
-                    STATISTIC_NODE * new_statistic = new STATISTIC_NODE;
-                    new_statistic->requester_id = requester_ids[i];
-                    new_statistic->statistic_value = random_response;
-                    deposit->insert(new_statistic);
-                    have_read[i] = 0;
-                    requests_left--;
-                    done = true;
-                }
-            }
-        }
-    }
-    for (int i=1; i<number_of_worker_threads; i++){
-        if ((have_read[i] == 0) || (have_read[i] == 1)) {
-            string temp = "quit";
-            const char * s = (temp).c_str();
-            if (write(w_fd[i], s, strlen(s)+1) < 0) {
-                perror(string("ERROR: Writing to pipe! FD = %d\n", w_fd[i]).c_str());
-            }
-        }
-    }
-    pthread_exit(NULL);
-    */
-}
-
-void wait_for_all_threads() {
-    // Idea: the server sends a quit request to the worker;
-    // since the server is closing, the worker shuts down all worker threads
-    cout<<"***************All request threads are done***************"<<endl;
-    /*
-    REQUEST_NODE *request = new REQUEST_NODE;
-    request->requester_id = 0;
-    request->request_name = "quit";
-    bounded_buffer->insert(request);
-    pthread_join(e_thread, NULL);
-    */
-    cout<<"***************Event handler thread is done***************"<<endl;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -227,9 +249,9 @@ int main(int argc, char **argv) {
     // Initialization
 
     const char * host_name = "localhost";
-    unsigned short port_number = 1235;
+    unsigned short port_number = 7001;
 
-    number_of_worker_threads = 2;
+    number_of_worker_threads = 3;
 
     // ***********************************************************
     // getopt code
@@ -269,12 +291,14 @@ int main(int argc, char **argv) {
     }
     // ***********************************************************
 
+    if (number_of_worker_threads > 25) {
+        number_of_worker_threads = 25;
+    }
+
     cout<<"-----------number of worker threads = "<<number_of_worker_threads<<endl;
     cout<<"----------------name of server host = "<<host_name<<endl;
     cout<<"---------port number of server host = "<<port_number<<endl;
     
-    int status;
-    pid_t pid;
     w_threads = new pthread_t [number_of_worker_threads];
 
     // Initialize threads:
@@ -283,6 +307,10 @@ int main(int argc, char **argv) {
 
     send_join_request();
 
+    int start_char;
+    int stop_char;
+    int password_length;
+
     // ***********************************************************
     // Initialize Worker Loop
     string input;
@@ -290,8 +318,34 @@ int main(int argc, char **argv) {
         int numRead = lsp_request_read(worker_channel,(void*) &input);
         if(numRead > 0) {
             cout<<"!!! Let's Crack This Password !!!"<<endl;
-            cout<<"Password: "<<input<<endl;
-            password_cracker(input);
+            cout<<"Input: "<<input<<endl;
+            request_hash = input.substr(0,40);
+            cout<<"Hash: "<<request_hash<<endl;
+            string worker_position = input.substr(input.length()-1, input.length());
+            cout <<"worker_position = "<<worker_position<<endl;
+            input = input.substr(0,input.length()-1);
+            password_length = atoi((input.substr(46,input.length()-46)).c_str());
+            cout<<"Length: "<<password_length<<endl;
+            if (worker_position == "1") {
+                start_char = 0;
+                stop_char = 8;
+            } else if (worker_position == "2") {
+                start_char = 8;
+                stop_char = 16;
+            } else if (worker_position == "3") {
+                start_char = 16;
+                stop_char = 25;
+                last = true;
+            } else if (worker_position == "4") {
+                start_char = 15;
+                stop_char = 20;
+            } else if (worker_position == "5") {
+                start_char = 20;
+                stop_char = 25;
+                last = true;
+            } 
+            //password_cracker(input);
+            password_cracker(password_length, start_char, stop_char);
             // now that a password has been cracked, restart
 
             // TODO worker will close when the server closes it:
@@ -299,42 +353,6 @@ int main(int argc, char **argv) {
             send_join_request();
         }
     }
-    // ***********************************************************
-
-    // ***********************************************************
-    // Worker thread implementation
-    /*
-    int new_worker_thread;
-    for (int i = 0; i<number_of_worker_threads; i++){
-        // remove requests from the bounded buffer
-        NetworkRequestChannel *worker_channel = new NetworkRequestChannel (host_name, port_number);
-        new_worker_thread = pthread_create(&w_threads[i], NULL, worker_thread, worker_channel);
-        if (new_worker_thread){
-            cout<<"ERROR: return code from pthread_create() is "<<new_worker_thread<<endl;
-            exit(-1);
-        }
-    }
-    */
-    // ***********************************************************    
-
-    // ***********************************************************
-    // Event handler implementation
-    /*
-    // create event handler thread
-        for (int i = 0; i<number_of_worker_threads; i++){
-            // remove requests from the bounded buffer
-            string new_thread_name = chan->send_request("newthread");
-            RequestChannel *worker_channel = new RequestChannel (new_thread_name, RequestChannel::CLIENT_SIDE);
-            r_fd[i] = worker_channel->read_fd();
-            w_fd[i] = worker_channel->write_fd();
-            channel_pointer[i] = worker_channel;
-        }
-        int event_handler = pthread_create(&e_thread, NULL, event_handler_thread, NULL);
-        if (event_handler){
-            cout<<"ERROR: return code from pthread_create() is "<<event_handler<<endl;
-            exit(-1);
-        }
-    */
     // ***********************************************************
 
     // ***********************************************************

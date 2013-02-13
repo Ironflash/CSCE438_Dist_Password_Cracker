@@ -19,7 +19,6 @@ private:
 	std::queue<lsp_message*> m_inbox;
 	std::queue<lsp_message*> m_outbox;
 	std::queue<lsp_message*> m_waitbox;		// holds messages until connection id has been assigned
-	std::queue<lsp_message*> m_ackbox;
 	uint32_t m_connid;		//the connection id 
 	pthread_t 	m_readThread;
 	pthread_t   m_writeThread;
@@ -120,13 +119,6 @@ public:
 		m_waitbox.push(message);
 	}
 
-	void toAckbox(lsp_message* message)
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-		m_ackbox.push(message);
-		// pthread_mutex_unlock(&m_outboxLock);
-	}
-
 	void setMessageWaiting(lsp_message* message)
 	{
 		pthread_mutex_lock(&m_waitingMessageLock);
@@ -220,32 +212,16 @@ public:
 	lsp_message* fromOutbox()
 	{
 		// pthread_mutex_lock(&m_outboxLock);
-
 		if(m_outbox.empty())
 		{
 			return NULL;
 		}
-		printf("Request Outbox size: %d",m_outbox.size());
 		lsp_message* result = m_outbox.front();
 		m_outbox.pop();
 		// pthread_mutex_unlock(&m_outboxLock);
 		return result;
 	}
 
-	lsp_message* fromAckbox()
-	{
-		// pthread_mutex_lock(&m_outboxLock);
-
-		if(m_ackbox.empty())
-		{
-			return NULL;
-		}
-		printf("Request Outbox size: %d",m_ackbox.size());
-		lsp_message* result = m_ackbox.front();
-		m_ackbox.pop();
-		// pthread_mutex_unlock(&m_outboxLock);
-		return result;
-	}
 	uint32_t nextSeq()
 	{
 		return m_nextSeqnum++;
@@ -350,10 +326,5 @@ public:
 	bool shouldEndThreads()
 	{
 		return m_endThreads;
-	}
-
-	int numMessagesLeft()
-	{
-		return m_outbox.size();
 	}
 };
