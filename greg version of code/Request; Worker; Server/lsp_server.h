@@ -75,6 +75,7 @@ private:
 	pthread_mutex_t m_cliConnectionsLock;
 	pthread_mutex_t m_reqRWLock;
 	pthread_mutex_t m_workRWLock;
+	pthread_mutex_t m_dropLock;
 	lsp_message* m_reqMessageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_workMessageWaiting;	// message waiting for an acknowledgment
 	lsp_message* m_mostRecentReqMessage;
@@ -109,6 +110,7 @@ public:
 		pthread_mutex_init(&m_cliConnectionsLock, NULL);
 		pthread_mutex_init(&m_reqRWLock, NULL);
 		pthread_mutex_init(&m_workRWLock, NULL);
+		pthread_mutex_init(&m_dropLock, NULL);
 	}
 	~lsp_server()
 	{
@@ -120,6 +122,7 @@ public:
 		pthread_mutex_destroy(&m_cliConnectionsLock);
 		pthread_mutex_destroy(&m_reqRWLock);
 		pthread_mutex_destroy(&m_workRWLock);
+		pthread_mutex_destroy(&m_dropLock);
 	}
 	/* setters */
 	void setReqPort(int port)
@@ -708,9 +711,11 @@ public:
 
 	void dropClient(uint32_t connid)
 	{
+		pthread_mutex_lock(&m_dropLock);
 		/* remove the cli from the list of clients */
 		removeCliAddr(connid);
 		//if the connection id is even and therefore a worker
+		
 		if(connid % 2 == 0)
 		{
 			//printf("dropping worker\n");
@@ -747,6 +752,7 @@ public:
 			//required so that the server will go on and not wait for a reply
 			m_workMessageAcknowledged = true;
 		}
+		pthread_mutex_unlock(&m_dropLock);
 		
 	}
 

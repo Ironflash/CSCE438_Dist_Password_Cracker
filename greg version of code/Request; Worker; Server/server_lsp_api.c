@@ -134,6 +134,7 @@ void* readReqMessage(void* arg)
 			//check for any ids that have been freed by disconnects
 			// if(a_srv->hasReqDisconnect())
 			// {
+			// 	printf("Assigning previously disconnected id\n");
 			// 	connid = a_srv->nextReqDis();
 			// }
 			// else
